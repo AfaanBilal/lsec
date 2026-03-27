@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>lsec — Laravel Security Audit CLI</title>
   <meta name="description" content="lsec is a fast, lightweight Laravel security audit CLI written in Rust. 51 rules across 8 categories. JSON, SARIF, and pretty terminal output." />
+  <meta name="author" content="Afaan Bilal" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -312,7 +313,7 @@
     /* ── Feature cards ───────────────────────────── */
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 16px;
     }
     .card {
@@ -336,7 +337,7 @@
     /* ── Rule category grid ──────────────────────── */
     .rules-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 12px;
     }
     .rule-card {
@@ -421,7 +422,7 @@
     /* ── Format cards ────────────────────────────── */
     .formats {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 16px;
     }
     .format-card {

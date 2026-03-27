@@ -24,7 +24,7 @@ use rules::{all_rule_metadata, run_rules};
 use scanner::Project;
 
 #[derive(Parser, Debug)]
-#[command(name = "lsec", version, about = "Laravel Security Audit CLI (c) Afaan Bilal <https://afaan.dev>")]
+#[command(name = "lsec", version, about = "Laravel Security Audit CLI \n© Afaan Bilal <https://afaan.dev>")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

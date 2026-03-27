@@ -236,6 +236,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(err) => {
+            eprintln!("Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>");
             eprintln!("lsec: {err}");
             ExitCode::from(2)
         }
@@ -301,6 +302,7 @@ enum BaselineMode {
 
 fn run_scan(args: ScanArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let root = fs::canonicalize(&args.path)?;
+    ensure_laravel_root(&root)?;
     let config = load_config(&root, args.config.as_deref())?;
     let only = parse_categories(args.only.as_deref())?;
     let mut skip = parse_categories(args.skip.as_deref())?;
@@ -354,6 +356,7 @@ fn run_baseline(
     mode: BaselineMode,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let root = fs::canonicalize(&command.path)?;
+    ensure_laravel_root(&root)?;
     let config = load_config(&root, command.config.as_deref())?;
     let only = parse_categories(command.only.as_deref())?;
     let mut skip = parse_categories(command.skip.as_deref())?;
@@ -424,6 +427,22 @@ fn filtered_findings(project: &Project, context: &ScanContext) -> Vec<Finding> {
         .into_iter()
         .filter(|finding| context.confidence_enabled(finding.rule_id, finding.confidence))
         .collect()
+}
+
+fn ensure_laravel_root(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let artisan = root.join("artisan");
+    let bootstrap = root.join("bootstrap").join("app.php");
+    let config_app = root.join("config").join("app.php");
+
+    if artisan.is_file() && (bootstrap.is_file() || config_app.is_file()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} does not look like a Laravel application root",
+            root.display()
+        )
+        .into())
+    }
 }
 
 fn load_config(root: &Path, explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
@@ -625,5 +644,47 @@ fn paint_severity(severity: Severity) -> colored::ColoredString {
         Severity::Medium => severity.as_str().yellow(),
         Severity::Low => severity.as_str().cyan(),
         Severity::Info => severity.as_str().normal(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_laravel_root;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("lsec-{name}-{unique}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn accepts_laravel_like_root() {
+        let root = temp_dir("laravel-root");
+        fs::write(root.join("artisan"), "#!/usr/bin/env php").unwrap();
+        fs::create_dir_all(root.join("bootstrap")).unwrap();
+        fs::write(root.join("bootstrap").join("app.php"), "<?php").unwrap();
+
+        let result = ensure_laravel_root(&root);
+
+        fs::remove_dir_all(&root).unwrap();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_non_laravel_root() {
+        let root = temp_dir("not-laravel");
+        fs::write(root.join("README.md"), "hello").unwrap();
+
+        let err = ensure_laravel_root(&root).unwrap_err().to_string();
+
+        fs::remove_dir_all(&root).unwrap();
+        assert!(err.contains("does not look like a Laravel application root"));
     }
 }

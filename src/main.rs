@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use colored::Colorize;
 
 use config::Config;
 use models::{Category, RuleMeta, ScanContext, Severity};
@@ -208,13 +209,82 @@ fn parse_categories(value: Option<&str>) -> Result<Vec<Category>, Box<dyn std::e
 }
 
 fn print_rules(rules: &[RuleMeta]) {
-    for rule in rules {
+    let categories = [
+        Category::Env,
+        Category::Auth,
+        Category::Injection,
+        Category::Http,
+        Category::Storage,
+        Category::Deps,
+        Category::Secrets,
+        Category::Logging,
+    ];
+    let id_width = rules.iter().map(|rule| rule.id.len()).max().unwrap_or(0);
+
+    println!("{} {}", "Laravel Security Audit CLI".bold(), "\n© Afaan Bilal <https://afaan.dev>\n");
+    println!("{}", "Laravel security checks grouped by category and default severity.".dimmed());
+    println!();
+
+    for category in categories {
+        let category_rules: Vec<&RuleMeta> = rules
+            .iter()
+            .filter(|rule| rule.category == category)
+            .collect();
+        if category_rules.is_empty() {
+            continue;
+        }
+
         println!(
-            "{} [{}] {} ({})",
-            rule.id,
-            rule.category.as_str(),
-            rule.title,
-            rule.default_severity.as_str()
+            "{} {}",
+            category_icon(category),
+            category_label(category).bold()
         );
+        for rule in category_rules {
+            let severity = paint_severity(rule.default_severity);
+            println!(
+                "  {:<width$}  {:<8}  {}",
+                rule.id,
+                severity,
+                rule.title,
+                width = id_width
+            );
+        }
+        println!();
+    }
+}
+
+fn category_label(category: Category) -> &'static str {
+    match category {
+        Category::Env => "Environment",
+        Category::Auth => "Authentication",
+        Category::Injection => "Injection",
+        Category::Http => "HTTP",
+        Category::Storage => "Storage",
+        Category::Deps => "Dependencies",
+        Category::Secrets => "Secrets",
+        Category::Logging => "Logging",
+    }
+}
+
+fn category_icon(category: Category) -> &'static str {
+    match category {
+        Category::Env => "ENV",
+        Category::Auth => "AUTH",
+        Category::Injection => "INJ",
+        Category::Http => "HTTP",
+        Category::Storage => "FS",
+        Category::Deps => "DEPS",
+        Category::Secrets => "SEC",
+        Category::Logging => "LOG",
+    }
+}
+
+fn paint_severity(severity: Severity) -> colored::ColoredString {
+    match severity {
+        Severity::Critical => severity.as_str().red().bold(),
+        Severity::High => severity.as_str().red(),
+        Severity::Medium => severity.as_str().yellow(),
+        Severity::Low => severity.as_str().cyan(),
+        Severity::Info => severity.as_str().normal(),
     }
 }

@@ -131,6 +131,7 @@ pub struct ScanContext {
     pub skip: Vec<Category>,
     pub only_rule_ids: Vec<String>,
     pub skip_rule_ids: Vec<String>,
+    pub min_confidence: Option<f32>,
     pub ci: bool,
 }
 
@@ -150,5 +151,14 @@ impl ScanContext {
             return false;
         }
         self.only_rule_ids.is_empty() || self.only_rule_ids.iter().any(|id| id == rule_id)
+    }
+
+    pub fn confidence_enabled(&self, rule_id: &str, confidence: f32) -> bool {
+        let threshold = self
+            .config
+            .rule_min_confidence(rule_id)
+            .or(self.min_confidence)
+            .unwrap_or(0.0);
+        confidence >= threshold
     }
 }

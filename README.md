@@ -158,8 +158,11 @@ lsec scan <path> [--only <categories>] [--skip <categories>]
                  [--summary] [--quiet] [--ci]
                  [--fail-on <critical|high|medium|low|info>]
                  [--config <path>] [--baseline <path>] [--write-baseline]
+                 [--min-confidence <float>]
 
 lsec rules
+lsec baseline write <path> [--baseline <file>] [--config <file>]
+lsec baseline prune <path> [--baseline <file>] [--config <file>]
 ```
 
 ## Common Examples
@@ -212,10 +215,28 @@ lsec scan . --skip logging,http
 lsec scan . --skip-rule logging.debug-artifact,auth.impersonation-feature
 ```
 
-### Write a Baseline File
+### Write a Baseline File During Scan
 
 ```bash
 lsec scan . --write-baseline
+```
+
+### Write a Baseline File Explicitly
+
+```bash
+lsec baseline write .
+```
+
+### Prune Stale Baseline Entries
+
+```bash
+lsec baseline prune .
+```
+
+### Ignore Low-Confidence Findings
+
+```bash
+lsec scan . --min-confidence 0.8
 ```
 
 ### Use an Existing Baseline File
@@ -262,8 +283,10 @@ to a file explicitly with `--config`.
 [scan]
 exclude_paths = ["vendor/", "tests/", "node_modules/", ".git/", "storage/logs/"]
 fail_on = "high"
+min_confidence = 0.7
 
 [rules]
+min_confidence_overrides = { "auth.missing-route-authorization" = 0.8, "logging.auth-failure-missing" = 0.55 }
 skip = ["logging"]
 skip_ids = ["logging.debug-artifact"]
 custom_secrets_patterns = [
@@ -278,6 +301,7 @@ custom_secrets_patterns = [
 
 - `exclude_paths`: path prefixes excluded from the project walk
 - `fail_on`: default CI failure threshold when `--ci` is used
+- `min_confidence`: global confidence floor applied before reporting
 
 Default excluded paths are:
 
@@ -290,28 +314,13 @@ Default excluded paths are:
 - `skip`: categories to suppress
 - `skip_ids`: exact rule ids to suppress
 - `custom_secrets_patterns`: additional regex patterns for secret detection
+- `min_confidence_overrides`: per-rule confidence floors keyed by exact rule id
 
 ## Output Formats
 
 ### Pretty
 
-The default terminal output prints each finding with:
-
-- severity
-- category grouping
-- title
-- rule id
-- confidence score
-- explanatory message
-- remediation guidance
-- file and line when available
-- code snippet when available
-
-It ends with a summary like:
-
-```text
-Summary: critical=1, high=2, medium=3, low=0, info=1, total=7
-```
+The default terminal output prints each finding in a structured two-column block with severity badges, confidence, location, explanation, remediation, and snippet context. It starts and ends with tabular severity and category summaries.
 
 ### JSON
 
@@ -357,6 +366,8 @@ Rule filters use exact ids, for example:
 http.ssrf-user-url, secrets.private-key, deps.known-vuln
 ```
 
+`lsec rules` also shows the default severity, default confidence, and a short remediation hint for each rule.
+
 ## How Scanning Works
 
 `lsec` recursively walks the target repository, reads text files into memory,
@@ -381,9 +392,9 @@ lsec scan . --ci --format sarif --output report.sarif --fail-on high
 Typical CI flow:
 
 1. run `lsec` on the checked-out Laravel project
-2. optionally load a baseline file for known legacy findings
+2. optionally load or refresh a baseline file for known legacy findings
 3. archive or upload `report.sarif`
-4. fail the job when findings meet the chosen severity threshold
+4. fail the job when findings meet the chosen severity threshold and confidence floor
 
 ## Current Limitations
 
@@ -406,7 +417,7 @@ Potential future improvements include:
 
 - richer Laravel version support awareness
 - more framework-aware route and middleware analysis
-- baseline and suppression support
+- richer baseline lifecycle support
 - diff-only scanning for pull requests
 - autofix or remediation suggestions
 - GitHub Actions examples and packaged releases

@@ -16,21 +16,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
 use config::Config;
 use models::{Category, Finding, RuleMeta, ScanContext, Severity};
 use reporter::{ReportFormat, render_report};
-use rules::{all_rule_metadata, run_rules};
+use rules::{all_rule_metadata, confidence_for_rule, remediation_for_rule, run_rules};
 use scanner::Project;
 
 #[derive(Parser, Debug)]
 #[command(
     name = "lsec",
     version,
-    about = "Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>"
+    about = "Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>",
+    long_about = "Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>\n\nStatic security checks for Laravel repositories, with pretty terminal output, JSON, SARIF, filters, and CI-friendly gating."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -39,36 +40,143 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    Scan {
-        path: PathBuf,
-        #[arg(long)]
-        only: Option<String>,
-        #[arg(long)]
-        skip: Option<String>,
-        #[arg(long = "only-rule")]
-        only_rule: Option<String>,
-        #[arg(long = "skip-rule")]
-        skip_rule: Option<String>,
-        #[arg(long, value_enum, default_value_t = FormatArg::Pretty)]
-        format: FormatArg,
-        #[arg(long)]
-        output: Option<PathBuf>,
-        #[arg(long)]
-        summary: bool,
-        #[arg(long)]
-        quiet: bool,
-        #[arg(long)]
-        ci: bool,
-        #[arg(long)]
-        fail_on: Option<SeverityArg>,
-        #[arg(long)]
-        config: Option<PathBuf>,
-        #[arg(long)]
-        baseline: Option<PathBuf>,
-        #[arg(long)]
-        write_baseline: bool,
-    },
+    #[command(about = "Scan a Laravel project for security findings")]
+    Scan(ScanCommand),
+    #[command(about = "List supported rules with default severity and remediation guidance")]
     Rules,
+    #[command(subcommand, about = "Manage baseline suppression files")]
+    Baseline(BaselineCommands),
+}
+
+#[derive(Args, Debug)]
+struct ScanCommand {
+    #[arg(help = "Path to the Laravel project root to scan")]
+    path: PathBuf,
+    #[arg(
+        long,
+        value_name = "CATEGORIES",
+        help = "Comma-separated category allowlist, for example env,secrets,deps"
+    )]
+    only: Option<String>,
+    #[arg(
+        long,
+        value_name = "CATEGORIES",
+        help = "Comma-separated category denylist, for example logging,http"
+    )]
+    skip: Option<String>,
+    #[arg(
+        long = "only-rule",
+        value_name = "RULE_IDS",
+        help = "Comma-separated exact rule ids to run, for example http.ssrf-user-url,secrets.private-key"
+    )]
+    only_rule: Option<String>,
+    #[arg(
+        long = "skip-rule",
+        value_name = "RULE_IDS",
+        help = "Comma-separated exact rule ids to suppress"
+    )]
+    skip_rule: Option<String>,
+    #[arg(long, value_enum, default_value_t = FormatArg::Pretty, help = "Report format to render")]
+    format: FormatArg,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Write the rendered report to a file instead of stdout"
+    )]
+    output: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Render only the opening summary tables without per-finding details"
+    )]
+    summary: bool,
+    #[arg(long, help = "Suppress report output and rely on the exit code only")]
+    quiet: bool,
+    #[arg(
+        long,
+        help = "Enable CI mode so findings can fail the command based on severity"
+    )]
+    ci: bool,
+    #[arg(long, help = "Lowest severity that should fail CI mode")]
+    fail_on: Option<SeverityArg>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Path to an lsec TOML configuration file"
+    )]
+    config: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Load suppressions from a baseline JSON file"
+    )]
+    baseline: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Write the current findings to the baseline file after scanning"
+    )]
+    write_baseline: bool,
+    #[arg(
+        long,
+        value_name = "FLOAT",
+        help = "Ignore findings below this confidence score (0.0 to 1.0)"
+    )]
+    min_confidence: Option<f32>,
+}
+
+#[derive(Subcommand, Debug)]
+enum BaselineCommands {
+    #[command(about = "Create or overwrite a baseline file from the current scan")]
+    Write(BaselineCommand),
+    #[command(about = "Remove stale suppressions that no longer match current findings")]
+    Prune(BaselineCommand),
+}
+
+#[derive(Args, Debug)]
+struct BaselineCommand {
+    #[arg(help = "Path to the Laravel project root to scan")]
+    path: PathBuf,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Path to an lsec TOML configuration file"
+    )]
+    config: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Path to the baseline JSON file (defaults to <path>/lsec-baseline.json)"
+    )]
+    baseline: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "CATEGORIES",
+        help = "Comma-separated category allowlist applied before writing or pruning"
+    )]
+    only: Option<String>,
+    #[arg(
+        long,
+        value_name = "CATEGORIES",
+        help = "Comma-separated category denylist applied before writing or pruning"
+    )]
+    skip: Option<String>,
+    #[arg(
+        long = "only-rule",
+        value_name = "RULE_IDS",
+        help = "Comma-separated exact rule ids to include"
+    )]
+    only_rule: Option<String>,
+    #[arg(
+        long = "skip-rule",
+        value_name = "RULE_IDS",
+        help = "Comma-separated exact rule ids to suppress"
+    )]
+    skip_rule: Option<String>,
+    #[arg(
+        long,
+        value_name = "FLOAT",
+        help = "Ignore findings below this confidence score (0.0 to 1.0)"
+    )]
+    min_confidence: Option<f32>,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -137,40 +245,32 @@ fn main() -> ExitCode {
 fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Scan {
-            path,
-            only,
-            skip,
-            only_rule,
-            skip_rule,
-            format,
-            output,
-            summary,
-            quiet,
-            ci,
-            fail_on,
-            config,
-            baseline,
-            write_baseline,
-        } => run_scan(ScanArgs {
-            path,
-            only,
-            skip,
-            only_rule,
-            skip_rule,
-            format: format.into(),
-            output,
-            summary,
-            quiet,
-            ci,
-            fail_on: fail_on.map(Into::into),
-            config,
-            baseline,
-            write_baseline,
+        Commands::Scan(command) => run_scan(ScanArgs {
+            path: command.path,
+            only: command.only,
+            skip: command.skip,
+            only_rule: command.only_rule,
+            skip_rule: command.skip_rule,
+            format: command.format.into(),
+            output: command.output,
+            summary: command.summary,
+            quiet: command.quiet,
+            ci: command.ci,
+            fail_on: command.fail_on.map(Into::into),
+            config: command.config,
+            baseline: command.baseline,
+            write_baseline: command.write_baseline,
+            min_confidence: command.min_confidence,
         }),
         Commands::Rules => {
             print_rules(&all_rule_metadata());
             Ok(ExitCode::SUCCESS)
+        }
+        Commands::Baseline(BaselineCommands::Write(command)) => {
+            run_baseline(command, BaselineMode::Write)
+        }
+        Commands::Baseline(BaselineCommands::Prune(command)) => {
+            run_baseline(command, BaselineMode::Prune)
         }
     }
 }
@@ -190,6 +290,13 @@ struct ScanArgs {
     config: Option<PathBuf>,
     baseline: Option<PathBuf>,
     write_baseline: bool,
+    min_confidence: Option<f32>,
+}
+
+#[derive(Copy, Clone)]
+enum BaselineMode {
+    Write,
+    Prune,
 }
 
 fn run_scan(args: ScanArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
@@ -201,6 +308,7 @@ fn run_scan(args: ScanArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let only_rule_ids = parse_rule_ids(args.only_rule.as_deref());
     let mut skip_rule_ids = parse_rule_ids(args.skip_rule.as_deref());
     skip_rule_ids.extend(config.rule_id_skips());
+    let min_confidence = resolve_min_confidence(args.min_confidence, &config)?;
     let fail_on = args.fail_on.or(config.fail_on()).unwrap_or(Severity::High);
     let baseline_path = resolve_baseline_path(&root, args.baseline.as_deref());
     let existing_baseline = load_baseline(baseline_path.as_deref())?;
@@ -213,10 +321,11 @@ fn run_scan(args: ScanArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
         skip,
         only_rule_ids,
         skip_rule_ids,
+        min_confidence,
         ci: args.ci,
     };
 
-    let findings = run_rules(&project, &context);
+    let findings = filtered_findings(&project, &context);
 
     if args.write_baseline {
         let write_path = baseline_path.unwrap_or_else(|| root.join("lsec-baseline.json"));
@@ -238,6 +347,83 @@ fn run_scan(args: ScanArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+fn run_baseline(
+    command: BaselineCommand,
+    mode: BaselineMode,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let root = fs::canonicalize(&command.path)?;
+    let config = load_config(&root, command.config.as_deref())?;
+    let only = parse_categories(command.only.as_deref())?;
+    let mut skip = parse_categories(command.skip.as_deref())?;
+    skip.extend(config.rule_skips());
+    let only_rule_ids = parse_rule_ids(command.only_rule.as_deref());
+    let mut skip_rule_ids = parse_rule_ids(command.skip_rule.as_deref());
+    skip_rule_ids.extend(config.rule_id_skips());
+    let min_confidence = resolve_min_confidence(command.min_confidence, &config)?;
+    let baseline_path = command
+        .baseline
+        .clone()
+        .unwrap_or_else(|| root.join("lsec-baseline.json"));
+
+    let project = Project::load(&root, &config)?;
+    let context = ScanContext {
+        root: root.clone(),
+        config,
+        only,
+        skip,
+        only_rule_ids,
+        skip_rule_ids,
+        min_confidence,
+        ci: false,
+    };
+    let findings = filtered_findings(&project, &context);
+
+    match mode {
+        BaselineMode::Write => {
+            write_baseline_file(&baseline_path, &findings)?;
+            println!(
+                "{} {} ({})",
+                "Baseline written:".bold(),
+                baseline_path.display(),
+                findings.len()
+            );
+        }
+        BaselineMode::Prune => {
+            let existing = load_baseline(Some(&baseline_path))?.unwrap_or(BaselineFile {
+                version: 1,
+                suppressions: Vec::new(),
+            });
+            let active: HashSet<String> = findings.iter().map(Finding::fingerprint).collect();
+            let before = existing.suppressions.len();
+            let pruned = BaselineFile {
+                version: existing.version,
+                suppressions: existing
+                    .suppressions
+                    .into_iter()
+                    .filter(|entry| active.contains(&entry.fingerprint))
+                    .collect(),
+            };
+            fs::write(&baseline_path, serde_json::to_string_pretty(&pruned)?)?;
+            println!(
+                "{} {} (removed {}, kept {})",
+                "Baseline pruned:".bold(),
+                baseline_path.display(),
+                before.saturating_sub(pruned.suppressions.len()),
+                pruned.suppressions.len()
+            );
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn filtered_findings(project: &Project, context: &ScanContext) -> Vec<Finding> {
+    run_rules(project, context)
+        .into_iter()
+        .filter(|finding| context.confidence_enabled(finding.rule_id, finding.confidence))
+        .collect()
 }
 
 fn load_config(root: &Path, explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
@@ -272,6 +458,21 @@ fn parse_rule_ids(value: Option<&str>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn resolve_min_confidence(
+    cli_value: Option<f32>,
+    config: &Config,
+) -> Result<Option<f32>, Box<dyn std::error::Error>> {
+    let value = cli_value.or(config.min_confidence());
+    if let Some(value) = value {
+        if !(0.0..=1.0).contains(&value) {
+            return Err(
+                format!("confidence thresholds must be between 0.0 and 1.0, got {value}").into(),
+            );
+        }
+    }
+    Ok(value)
 }
 
 fn resolve_baseline_path(root: &Path, explicit: Option<&Path>) -> Option<PathBuf> {
@@ -342,13 +543,15 @@ fn print_rules(rules: &[RuleMeta]) {
     let id_width = rules.iter().map(|rule| rule.id.len()).max().unwrap_or(0);
 
     println!(
-        "{} {}",
+        "{}
+{}",
         "Laravel Security Audit CLI".bold(),
         "© Afaan Bilal <https://afaan.dev>"
     );
     println!(
         "{}",
-        "Security rule catalog by category and default severity.".dimmed()
+        "Security rule catalog by category, default severity, confidence, and remediation guidance."
+            .dimmed()
     );
     println!("{}", format!("Total rules: {}", rules.len()).dimmed());
     println!();
@@ -368,15 +571,21 @@ fn print_rules(rules: &[RuleMeta]) {
             category_label(category).bold(),
             category_rules.len()
         );
-        println!("{}", "-".repeat(72).dimmed());
+        println!("{}", "-".repeat(88).dimmed());
         for rule in category_rules {
             let severity = paint_severity(rule.default_severity);
             println!(
-                "  {:<width$}  {:<8}  {}",
+                "  {:<width$}  {:<8}  {:>3}%  {}",
                 rule.id,
                 severity,
+                (confidence_for_rule(rule.id) * 100.0).round() as u32,
                 rule.title,
                 width = id_width
+            );
+            println!(
+                "  {} {}",
+                "Fix:".bold(),
+                remediation_for_rule(rule.id).dimmed()
             );
         }
         println!();

@@ -71,7 +71,7 @@ fn make_finding(
     }
 }
 
-fn remediation_for_rule(rule_id: &str) -> &'static str {
+pub(crate) fn remediation_for_rule(rule_id: &str) -> &'static str {
     match rule_id {
         "env.committed-dotenv" => {
             "Ignore environment files in version control and rotate any secrets that may already have been committed."
@@ -195,7 +195,7 @@ fn remediation_for_rule(rule_id: &str) -> &'static str {
     }
 }
 
-fn confidence_for_rule(rule_id: &str) -> f32 {
+pub(crate) fn confidence_for_rule(rule_id: &str) -> f32 {
     match rule_id {
         "deps.known-vuln" => 0.98,
         "secrets.private-key" | "secrets.cloud-access-key" => 0.97,

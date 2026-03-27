@@ -13,6 +13,7 @@ fn context() -> ScanContext {
         skip: Vec::new(),
         only_rule_ids: Vec::new(),
         skip_rule_ids: Vec::new(),
+        min_confidence: None,
         ci: false,
     }
 }
@@ -108,4 +109,19 @@ fn respects_rule_id_filtering() {
     let findings = run_rules(&project, &context);
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].rule_id, "http.ssrf-user-url");
+}
+
+#[test]
+fn respects_confidence_threshold_overrides() {
+    let project = Project::from_test_files(&[(
+        "routes/web.php",
+        "Route::get('/admin/users', fn () => 'ok')->middleware('auth');",
+    )]);
+    let mut context = context();
+    context.min_confidence = Some(0.7);
+    let findings = run_rules(&project, &context)
+        .into_iter()
+        .filter(|finding| context.confidence_enabled(finding.rule_id, finding.confidence))
+        .collect::<Vec<_>>();
+    assert!(findings.is_empty());
 }

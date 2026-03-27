@@ -87,7 +87,10 @@ fn categories(findings: &[Finding]) -> Vec<CategoryCount> {
         .iter()
         .map(|category| CategoryCount {
             category: category.as_str(),
-            total: findings.iter().filter(|finding| finding.category == *category).count(),
+            total: findings
+                .iter()
+                .filter(|finding| finding.category == *category)
+                .count(),
         })
         .filter(|entry| entry.total > 0)
         .collect()

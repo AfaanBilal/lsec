@@ -54,8 +54,8 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
         r"(?i)sk_live_[A-Za-z0-9]{16,}",
         r"(?i)ghp_[A-Za-z0-9]{20,}",
     ];
-    let private_key_re = Regex::new(r"(?m)^-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----$")
-        .expect("valid regex");
+    let private_key_re =
+        Regex::new(r"(?m)^-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----$").expect("valid regex");
     let embedded_creds_url_re =
         Regex::new(r#"https?://[^\s/@:]+:[^\s/@]+@[^\s'"]+"#).expect("valid regex");
     let cloud_key_re = Regex::new(r#"\b(AKIA|ASIA)[A-Z0-9]{16}\b"#).expect("valid regex");

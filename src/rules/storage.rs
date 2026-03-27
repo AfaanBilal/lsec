@@ -67,10 +67,10 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
         r"(storeAs|putFileAs|move)\s*\([^)]*(Request::(input|get)|\$request->(input|get|file|all)|\$fileName|\$filename)",
     )
     .expect("valid regex");
-    let zip_extract_re = Regex::new(r"(ZipArchive|PharData).*(extractTo|extractTo\s*\()")
-        .expect("valid regex");
-    let image_make_re = Regex::new(r"(Image::make|Intervention\\Image|imagecreatefrom)")
-        .expect("valid regex");
+    let zip_extract_re =
+        Regex::new(r"(ZipArchive|PharData).*(extractTo|extractTo\s*\()").expect("valid regex");
+    let image_make_re =
+        Regex::new(r"(Image::make|Intervention\\Image|imagecreatefrom)").expect("valid regex");
 
     for file in project.files_with_extension("php") {
         let has_upload_handling = file.content.contains("->file(")

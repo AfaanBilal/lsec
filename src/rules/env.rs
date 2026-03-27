@@ -91,8 +91,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     let app_env_re = Regex::new(r"(?m)^APP_ENV=(.+)$").expect("valid regex");
     let app_debug_re = Regex::new(r"(?m)^APP_DEBUG=(.+)$").expect("valid regex");
     let app_url_re = Regex::new(r"(?m)^APP_URL=(.+)$").expect("valid regex");
-    let secure_cookie_re =
-        Regex::new(r"(?m)^SESSION_SECURE_COOKIE=(.+)$").expect("valid regex");
+    let secure_cookie_re = Regex::new(r"(?m)^SESSION_SECURE_COOKIE=(.+)$").expect("valid regex");
 
     for file in project.files_under(".env") {
         let app_env = app_env_re

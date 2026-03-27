@@ -77,8 +77,9 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     let cmd_exec_re = Regex::new(r"\b(exec|shell_exec|system|passthru|proc_open|popen)\s*\(")
         .expect("valid regex");
     let unserialize_re = Regex::new(r"\bunserialize\s*\(").expect("valid regex");
-    let dynamic_include_re = Regex::new(r"\b(include|include_once|require|require_once)\s*\([^)]*\$")
-        .expect("valid regex");
+    let dynamic_include_re =
+        Regex::new(r"\b(include|include_once|require|require_once)\s*\([^)]*\$")
+            .expect("valid regex");
 
     for file in project.files_with_extension("php") {
         let has_fillable = file.content.contains("$fillable");

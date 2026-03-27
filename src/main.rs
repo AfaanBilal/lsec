@@ -27,7 +27,11 @@ use rules::{all_rule_metadata, run_rules};
 use scanner::Project;
 
 #[derive(Parser, Debug)]
-#[command(name = "lsec", version, about = "Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>")]
+#[command(
+    name = "lsec",
+    version,
+    about = "Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -271,12 +275,10 @@ fn parse_rule_ids(value: Option<&str>) -> Vec<String> {
 }
 
 fn resolve_baseline_path(root: &Path, explicit: Option<&Path>) -> Option<PathBuf> {
-    explicit
-        .map(PathBuf::from)
-        .or_else(|| {
-            let default = root.join("lsec-baseline.json");
-            default.exists().then_some(default)
-        })
+    explicit.map(PathBuf::from).or_else(|| {
+        let default = root.join("lsec-baseline.json");
+        default.exists().then_some(default)
+    })
 }
 
 fn load_baseline(path: Option<&Path>) -> Result<Option<BaselineFile>, Box<dyn std::error::Error>> {
@@ -305,7 +307,10 @@ fn apply_baseline(findings: Vec<Finding>, baseline: Option<&BaselineFile>) -> Ve
         .collect()
 }
 
-fn write_baseline_file(path: &Path, findings: &[Finding]) -> Result<(), Box<dyn std::error::Error>> {
+fn write_baseline_file(
+    path: &Path,
+    findings: &[Finding],
+) -> Result<(), Box<dyn std::error::Error>> {
     let baseline = BaselineFile {
         version: 1,
         suppressions: findings
@@ -336,8 +341,16 @@ fn print_rules(rules: &[RuleMeta]) {
     ];
     let id_width = rules.iter().map(|rule| rule.id.len()).max().unwrap_or(0);
 
-    println!("{} {}", "Laravel Security Audit CLI".bold(), "\n© Afaan Bilal <https://afaan.dev>\n");
-    println!("{}", "Laravel security checks grouped by category and default severity.".dimmed());
+    println!(
+        "{} {}",
+        "Laravel Security Audit CLI".bold(),
+        "© Afaan Bilal <https://afaan.dev>"
+    );
+    println!(
+        "{}",
+        "Security rule catalog by category and default severity.".dimmed()
+    );
+    println!("{}", format!("Total rules: {}", rules.len()).dimmed());
     println!();
 
     for category in categories {
@@ -350,10 +363,12 @@ fn print_rules(rules: &[RuleMeta]) {
         }
 
         println!(
-            "{} {}",
+            "{} {} ({})",
             category_icon(category),
-            category_label(category).bold()
+            category_label(category).bold(),
+            category_rules.len()
         );
+        println!("{}", "-".repeat(72).dimmed());
         for rule in category_rules {
             let severity = paint_severity(rule.default_severity);
             println!(

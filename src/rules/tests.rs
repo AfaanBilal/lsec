@@ -24,9 +24,11 @@ fn detects_missing_authorization_on_sensitive_route() {
         "Route::get('/admin/users', fn () => 'ok')->middleware('auth');",
     )]);
     let findings = run_rules(&project, &context());
-    assert!(findings
-        .iter()
-        .any(|finding| finding.rule_id == "auth.missing-route-authorization"));
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "auth.missing-route-authorization")
+    );
 }
 
 #[test]
@@ -36,9 +38,11 @@ fn detects_unserialize_usage() {
         "<?php\n$payload = unserialize($request->input('payload'));",
     )]);
     let findings = run_rules(&project, &context());
-    assert!(findings
-        .iter()
-        .any(|finding| finding.rule_id == "injection.unserialize"));
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "injection.unserialize")
+    );
 }
 
 #[test]
@@ -48,9 +52,11 @@ fn detects_user_controlled_outbound_url() {
         "<?php\nHttp::get($request->input('url'));",
     )]);
     let findings = run_rules(&project, &context());
-    assert!(findings
-        .iter()
-        .any(|finding| finding.rule_id == "http.ssrf-user-url"));
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "http.ssrf-user-url")
+    );
 }
 
 #[test]
@@ -60,9 +66,11 @@ fn detects_user_controlled_storage_filename() {
         "<?php\n$request->file('avatar')->storeAs('avatars', $request->input('name'));",
     )]);
     let findings = run_rules(&project, &context());
-    assert!(findings
-        .iter()
-        .any(|finding| finding.rule_id == "storage.user-controlled-filename"));
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "storage.user-controlled-filename")
+    );
 }
 
 #[test]
@@ -77,12 +85,16 @@ fn detects_missing_lockfile_and_old_php_constraint() {
 }"#,
     )]);
     let findings = run_rules(&project, &context());
-    assert!(findings
-        .iter()
-        .any(|finding| finding.rule_id == "deps.lockfile-missing"));
-    assert!(findings
-        .iter()
-        .any(|finding| finding.rule_id == "deps.old-php-constraint"));
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "deps.lockfile-missing")
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "deps.old-php-constraint")
+    );
 }
 
 #[test]
@@ -97,4 +109,3 @@ fn respects_rule_id_filtering() {
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].rule_id, "http.ssrf-user-url");
 }
-

@@ -78,7 +78,8 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                 ));
             }
             if production_like
-                && (file.content.contains("LOG_LEVEL=debug") || file.content.contains("LOG_LEVEL=trace"))
+                && (file.content.contains("LOG_LEVEL=debug")
+                    || file.content.contains("LOG_LEVEL=trace"))
             {
                 let marker = if file.content.contains("LOG_LEVEL=debug") {
                     "LOG_LEVEL=debug"

@@ -12,17 +12,16 @@ use crate::models::{Category, Finding, Severity};
 pub fn render(findings: &[Finding], summary_only: bool) -> String {
     let mut output = String::new();
     let counts = counts(findings);
-    if summary_only {
-        output.push_str(&format_summary(&counts));
-        output.push('\n');
-        output.push_str(&format_category_summary(findings));
-        return output;
-    }
 
+    output.push_str(&format_banner());
+    output.push('\n');
     output.push_str(&format_summary(&counts));
     output.push('\n');
     output.push_str(&format_category_summary(findings));
-    output.push_str("\n\n");
+
+    if summary_only {
+        return output;
+    }
 
     for category in categories() {
         let category_findings: Vec<&Finding> = findings
@@ -33,33 +32,48 @@ pub fn render(findings: &[Finding], summary_only: bool) -> String {
             continue;
         }
 
+        output.push_str("\n\n");
         output.push_str(&format!(
-            "{} {}\n",
+            "{} {} ({})\n",
             category_code(category).bold(),
-            category_label(category).bold()
+            category_label(category).bold(),
+            category_findings.len()
         ));
+        output.push_str(&format!("{}\n", "─".repeat(72).dimmed()));
+
         for finding in category_findings {
             let severity = paint(finding.severity, finding.severity.as_str());
-            output.push_str(&format!("  [{severity}] {}\n", finding.title));
-            output.push_str(&format!("    Rule: {}\n", finding.rule_id));
-            output.push_str(&format!("    Confidence: {:.0}%\n", finding.confidence * 100.0));
-            output.push_str(&format!("    {}\n", finding.message));
-            output.push_str(&format!("    Fix: {}\n", finding.remediation));
+            output.push_str(&format!("[{severity}] {}\n", finding.title.bold()));
+            output.push_str(&format!("  Rule       {}\n", finding.rule_id.dimmed()));
+            output.push_str(&format!(
+                "  Confidence {:.0}%\n",
+                finding.confidence * 100.0
+            ));
+            output.push_str(&format!("  Why        {}\n", finding.message));
+            output.push_str(&format!("  Fix        {}\n", finding.remediation));
             if let Some(file) = &finding.file {
-                output.push_str(&format!("    File: {}", file));
+                output.push_str(&format!("  Location   {}", file.cyan()));
                 if let Some(line) = finding.line {
-                    output.push_str(&format!(":{line}"));
+                    output.push_str(&format!(":{}", line.to_string().cyan()));
                 }
                 output.push('\n');
             }
             if let Some(snippet) = &finding.snippet {
-                output.push_str(&format!("    Code: {snippet}\n"));
+                output.push_str(&format!("  Snippet    {}\n", snippet.trim()));
             }
             output.push('\n');
         }
     }
 
     output.trim_end().to_string()
+}
+
+fn format_banner() -> String {
+    format!(
+        "{}\n{}",
+        "lsec".bold(),
+        "Laravel Security Audit CLI".dimmed()
+    )
 }
 
 fn paint(severity: Severity, label: &str) -> colored::ColoredString {
@@ -87,29 +101,33 @@ fn counts(findings: &[Finding]) -> [usize; 5] {
 }
 
 fn format_summary(counts: &[usize; 5]) -> String {
+    let total = counts.iter().sum::<usize>();
     format!(
-        "Summary: critical={}, high={}, medium={}, low={}, info={}, total={}",
-        counts[0],
-        counts[1],
-        counts[2],
-        counts[3],
-        counts[4],
-        counts.iter().sum::<usize>()
+        "Summary  {}  {}  {}  {}  {}  total={} ",
+        paint(Severity::Critical, &format!("critical={}", counts[0])),
+        paint(Severity::High, &format!("high={}", counts[1])),
+        paint(Severity::Medium, &format!("medium={}", counts[2])),
+        paint(Severity::Low, &format!("low={}", counts[3])),
+        paint(Severity::Info, &format!("info={}", counts[4])),
+        total
     )
 }
 
 fn format_category_summary(findings: &[Finding]) -> String {
-    let mut lines = Vec::new();
+    let mut entries = Vec::new();
     for category in categories() {
-        let count = findings.iter().filter(|finding| finding.category == category).count();
+        let count = findings
+            .iter()
+            .filter(|finding| finding.category == category)
+            .count();
         if count > 0 {
-            lines.push(format!("  {} {}={}", category_code(category), category.as_str(), count));
+            entries.push(format!("{} {}", category_code(category), count));
         }
     }
-    if lines.is_empty() {
-        "By category: none".to_string()
+    if entries.is_empty() {
+        "Categories  none".to_string()
     } else {
-        format!("By category:\n{}", lines.join("\n"))
+        format!("Categories  {}", entries.join("  "))
     }
 }
 

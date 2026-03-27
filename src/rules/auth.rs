@@ -82,8 +82,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     .expect("valid regex");
     let weak_hash_re = Regex::new(r"\b(md5|sha1)\s*\(").expect("valid regex");
     let impersonation_re =
-        Regex::new(r"(?i)(impersonat(e|ion)|loginAs\s*\(|becomeUser\s*\()")
-            .expect("valid regex");
+        Regex::new(r"(?i)(impersonat(e|ion)|loginAs\s*\(|becomeUser\s*\()").expect("valid regex");
     let role_assignment_re = Regex::new(
         r"(assignRole|syncRoles|givePermissionTo|syncPermissions)\s*\([^)]*(Request::(input|get)|\$request->(input|get|all|validated|query))",
     )
@@ -111,8 +110,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
             }
 
             let inherited_auth = active_groups.iter().any(|group| group.has_auth_middleware);
-            let inherited_authorization =
-                active_groups.iter().any(|group| group.has_authorization);
+            let inherited_authorization = active_groups.iter().any(|group| group.has_authorization);
             let sensitive_route =
                 sensitive_route_re.is_match(line) && sensitive_hint_re.is_match(&normalized);
             let route_has_auth = has_auth_middleware(&normalized) || inherited_auth;
@@ -279,9 +277,7 @@ fn has_auth_middleware(line: &str) -> bool {
 
 fn has_authorization_hint(line: &str) -> bool {
     (line.contains("middleware(")
-        && (line.contains("can:")
-            || line.contains("permission:")
-            || line.contains("role:")))
+        && (line.contains("can:") || line.contains("permission:") || line.contains("role:")))
         || line.contains("->can(")
         || line.contains("authorize(")
         || line.contains("Gate::allows(")

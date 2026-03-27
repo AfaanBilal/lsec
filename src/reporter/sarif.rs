@@ -31,6 +31,7 @@ struct Tool {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Driver {
     name: &'static str,
     information_uri: &'static str,
@@ -38,15 +39,18 @@ struct Driver {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Rule {
     id: String,
     name: String,
     short_description: Message,
     help: Message,
+    help_uri: &'static str,
     properties: Properties,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ResultItem {
     rule_id: String,
     level: String,
@@ -66,22 +70,27 @@ struct Properties {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Location {
     physical_location: PhysicalLocation,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PhysicalLocation {
     artifact_location: ArtifactLocation,
     region: Region,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ArtifactLocation {
     uri: String,
+    uri_base_id: &'static str,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Region {
     start_line: usize,
 }
@@ -103,6 +112,7 @@ pub fn render(
             help: Message {
                 text: finding.remediation.to_string(),
             },
+            help_uri: "https://github.com/AfaanBilal/lsec",
             properties: Properties {
                 confidence: finding.confidence,
             },
@@ -116,7 +126,7 @@ pub fn render(
             tool: Tool {
                 driver: Driver {
                     name: "lsec",
-                    information_uri: "https://example.invalid/lsec",
+                    information_uri: "https://github.com/AfaanBilal/lsec",
                     rules: rules_by_id.into_values().collect(),
                 },
             },
@@ -132,6 +142,7 @@ pub fn render(
                         physical_location: PhysicalLocation {
                             artifact_location: ArtifactLocation {
                                 uri: finding.file.clone().unwrap_or_else(|| ".".to_string()),
+                                uri_base_id: "%SRCROOT%",
                             },
                             region: Region {
                                 start_line: finding.line.unwrap_or(1),

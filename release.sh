@@ -56,4 +56,7 @@ git tag -a "$TAG" -m "Release $TAG"
 git push origin HEAD
 git push origin "$TAG"
 
-echo "Done — $TAG pushed. GitHub Actions will build and publish the release."
+# Publish to crates.io
+cargo publish
+
+echo "Done — $TAG pushed and published to crates.io. GitHub Actions will build and publish the release."

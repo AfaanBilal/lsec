@@ -115,12 +115,26 @@ fast repository-level static checks against common Laravel security footguns.
 
 ### Prerequisites
 
-- Rust toolchain with Cargo
 - a Laravel project to scan
+
+### Install via Cargo
+
+If you have a Rust toolchain with Cargo installed, you can install `lsec` directly:
+
+```bash
+cargo install lsec
+```
+
+### Download Binary
+
+Pre-built binaries for Linux, macOS, and Windows are available on the
+[GitHub Releases](https://github.com/AfaanBilal/lsec/releases) page.
 
 ### Build From Source
 
 ```bash
+git clone https://github.com/AfaanBilal/lsec
+cd lsec
 cargo build --release
 ```
 

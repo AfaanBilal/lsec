@@ -29,7 +29,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 # Ensure tag doesn't already exist
-if git rev-parse "$TAG" &>/dev/null; then
+if [[ -n "$(git tag --list "$TAG")" ]]; then
   echo "Error: tag $TAG already exists"
   exit 1
 fi
@@ -43,12 +43,16 @@ rm -f Cargo.toml.bak
 # Update Cargo.lock
 cargo update --workspace --quiet
 
+# Update version badge in website
+sed -i.bak "s|<span class=\"nav-logo-badge\">v[^<]*</span>|<span class=\"nav-logo-badge\">$TAG</span>|" docs/index.html
+rm -f docs/index.html.bak
+
 # Commit
-git add Cargo.toml Cargo.lock
+git add Cargo.toml Cargo.lock docs/index.html
 git commit -m "chore: release $TAG"
 
 # Tag and push
-git tag "$TAG"
+git tag -a "$TAG" -m "Release $TAG"
 git push origin HEAD
 git push origin "$TAG"
 

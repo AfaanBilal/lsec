@@ -19,22 +19,27 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             archive: tar.gz
+            asset_name: lsec-linux-x86_64
 
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             archive: tar.gz
+            asset_name: lsec-linux-arm64
 
           - target: x86_64-apple-darwin
             os: macos-latest
             archive: tar.gz
+            asset_name: lsec-macos-x86_64
 
           - target: aarch64-apple-darwin
             os: macos-latest
             archive: tar.gz
+            asset_name: lsec-macos-arm64
 
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             archive: zip
+            asset_name: lsec-windows-x86_64
 
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +64,7 @@ jobs:
         shell: bash
         run: |
           BINARY=target/${{ matrix.target }}/release/lsec
-          ARCHIVE=lsec-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          ARCHIVE=${{ matrix.asset_name }}.tar.gz
           tar -czf "$ARCHIVE" -C "$(dirname $BINARY)" "$(basename $BINARY)"
           echo "ASSET=$ARCHIVE" >> $GITHUB_ENV
 
@@ -68,7 +73,7 @@ jobs:
         shell: pwsh
         run: |
           $binary = "target\${{ matrix.target }}\release\lsec.exe"
-          $archive = "lsec-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          $archive = "${{ matrix.asset_name }}.zip"
           Compress-Archive -Path $binary -DestinationPath $archive
           "ASSET=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
 

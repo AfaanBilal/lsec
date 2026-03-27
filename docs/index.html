@@ -908,10 +908,23 @@
     <h2>Download the binary</h2>
     <p class="section-sub">Grab the latest pre-built binary for your platform from <a href="https://github.com/AfaanBilal/lsec/releases">GitHub Releases</a> and drop it on your path — no runtime dependencies required.</p>
 
-    <pre class="code-block" style="margin-bottom:16px;"><code class="language-bash"># Linux / macOS
-curl -L https://github.com/AfaanBilal/lsec/releases/latest/download/lsec -o lsec
-chmod +x lsec
-mv lsec /usr/local/bin/lsec</code></pre>
+    <pre class="code-block" style="margin-bottom:16px;"><code class="language-bash"># Linux (x86_64)
+curl -L https://github.com/AfaanBilal/lsec/releases/latest/download/lsec-linux-x86_64.tar.gz | tar -xz
+sudo mv lsec /usr/local/bin/
+
+# Linux (ARM64)
+curl -L https://github.com/AfaanBilal/lsec/releases/latest/download/lsec-linux-arm64.tar.gz | tar -xz
+sudo mv lsec /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -L https://github.com/AfaanBilal/lsec/releases/latest/download/lsec-macos-arm64.tar.gz | tar -xz
+sudo mv lsec /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/AfaanBilal/lsec/releases/latest/download/lsec-macos-x86_64.tar.gz | tar -xz
+sudo mv lsec /usr/local/bin/
+
+# Windows — download lsec-windows-x86_64.zip from GitHub Releases and add to PATH</code></pre>
 
     <h3 style="margin-top:40px; margin-bottom:8px; font-size:0.95rem; color:var(--muted); font-weight:500;">Or build from source</h3>
     <p style="font-size:0.875rem; color:var(--muted); margin-bottom:16px;">Requires a <a href="https://rustup.rs">Rust toolchain</a>.</p>

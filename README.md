@@ -143,6 +143,8 @@ cargo run -- scan /path/to/laravel-app
 lsec scan /path/to/laravel-app
 ```
 
+The supplied path must be the Laravel application root. `lsec` validates this up front and errors out if the directory does not look like a Laravel project root.
+
 ### List Supported Rules
 
 ```bash
@@ -226,6 +228,8 @@ lsec scan . --write-baseline
 ```bash
 lsec baseline write .
 ```
+
+Baseline commands use the same Laravel-root validation as `scan`.
 
 ### Prune Stale Baseline Entries
 
@@ -370,8 +374,7 @@ http.ssrf-user-url, secrets.private-key, deps.known-vuln
 
 ## How Scanning Works
 
-`lsec` recursively walks the target repository, reads text files into memory,
-and skips:
+`lsec` first validates that the supplied path looks like a Laravel application root, then recursively walks the target repository, reads text files into memory, and skips:
 
 - excluded path prefixes from config
 - binary files
@@ -408,6 +411,7 @@ limitations:
 - secrets detection is regex-based
 - route and auth analysis is intentionally shallow and favors speed over deep
   semantic understanding
+- the target path must be the Laravel application root rather than an arbitrary subdirectory
 - only Laravel-relevant patterns currently implemented in the source are
   checked
 

@@ -125,6 +125,8 @@ If you have a Rust toolchain with Cargo installed, you can install `lsec` direct
 cargo install lsec
 ```
 
+The crate is also available on [crates.io](https://crates.io/crates/lsec).
+
 ### Download Binary
 
 Pre-built binaries for Linux, macOS, and Windows are available on the

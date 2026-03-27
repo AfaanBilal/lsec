@@ -3,7 +3,8 @@
 `lsec` is a Laravel security audit CLI written in Rust. It scans a Laravel
 project for common security issues, insecure coding patterns, risky
 configuration, exposed secrets, and dependency concerns, then reports findings
-in human-readable, JSON, or SARIF form.
+in human-readable, JSON, or SARIF form. It currently ships 51 rules across 8
+categories.
 
 ## Why `lsec`
 

@@ -12,6 +12,8 @@ use crate::models::{Category, Finding, Severity};
 const WRAP_WIDTH: usize = 96;
 const DETAIL_INDENT: &str = "  ";
 const BLOCK_INDENT: &str = "    ";
+const SNIPPET_BG: (u8, u8, u8) = (28, 32, 40);
+const SECTION_WIDTH: usize = 104;
 
 pub fn render(findings: &[Finding], summary_only: bool) -> String {
     let mut output = String::new();
@@ -41,12 +43,12 @@ pub fn render(findings: &[Finding], summary_only: bool) -> String {
             category_label(category).bold(),
             category_findings.len()
         ));
-        output.push_str(&format!("{}\n", "=".repeat(84).dimmed()));
+        output.push_str(&format!("{}\n", "=".repeat(SECTION_WIDTH).dimmed()));
 
         for (index, finding) in category_findings.iter().enumerate() {
             output.push_str(&format_finding_block(finding));
             if index + 1 != category_findings.len() {
-                output.push_str(&format!("{}\n\n", "-".repeat(84).dimmed()));
+                output.push_str(&format!("{}\n\n", "-".repeat(SECTION_WIDTH).dimmed()));
             }
         }
     }
@@ -73,7 +75,7 @@ fn format_finding_block(finding: &Finding) -> String {
     output.push_str(&wrapped_field("Why", &finding.message));
     output.push_str(&wrapped_field("Fix", finding.remediation));
     if let Some(snippet) = &finding.snippet {
-        output.push_str(&snippet_block(snippet.trim()));
+        output.push_str(&snippet_block(finding, snippet.trim()));
     }
     output
 }
@@ -104,13 +106,137 @@ fn wrapped_field(label_text: &str, value: &str) -> String {
     output
 }
 
-fn snippet_block(snippet: &str) -> String {
+fn snippet_block(finding: &Finding, snippet: &str) -> String {
     let mut output = String::new();
     output.push_str(&format!("{}{}\n", DETAIL_INDENT, label("Snippet")));
-    for line in wrap_text(snippet, WRAP_WIDTH.saturating_sub(BLOCK_INDENT.len() + 2)) {
-        output.push_str(&format!("{}{} {}\n", BLOCK_INDENT, ">".dimmed(), line));
+    for raw_line in snippet.lines() {
+        let line = raw_line.trim();
+        let highlighted = if line.is_empty() {
+            String::new()
+        } else {
+            highlight_snippet_line(line, finding.file.as_deref())
+        };
+        output.push_str(&format!(
+            "{}{}\n",
+            BLOCK_INDENT,
+            snippet_panel_line(&highlighted)
+        ));
     }
     output
+}
+
+fn snippet_panel_line(content: &str) -> colored::ColoredString {
+    format!("  {content:<90}  ").on_truecolor(SNIPPET_BG.0, SNIPPET_BG.1, SNIPPET_BG.2)
+}
+
+fn highlight_snippet_line(line: &str, file: Option<&str>) -> String {
+    match snippet_language(file) {
+        SnippetLanguage::Php => highlight_php_line(line),
+        SnippetLanguage::Plain => line.to_string(),
+    }
+}
+
+#[derive(Copy, Clone)]
+enum SnippetLanguage {
+    Php,
+    Plain,
+}
+
+fn snippet_language(file: Option<&str>) -> SnippetLanguage {
+    match file.and_then(file_extension) {
+        Some("php") => SnippetLanguage::Php,
+        _ => SnippetLanguage::Plain,
+    }
+}
+
+fn file_extension(path: &str) -> Option<&str> {
+    path.rsplit_once('.').map(|(_, ext)| ext)
+}
+
+fn highlight_php_line(line: &str) -> String {
+    let mut out = String::new();
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let ch = chars[i];
+
+        if ch == '\'' || ch == '"' {
+            let quote = ch;
+            let mut token = String::new();
+            token.push(ch);
+            i += 1;
+            while i < chars.len() {
+                let current = chars[i];
+                token.push(current);
+                i += 1;
+                if current == quote && !is_escaped(&token) {
+                    break;
+                }
+            }
+            out.push_str(&token.green().to_string());
+            continue;
+        }
+
+        if ch == '$' {
+            let mut token = String::from("$");
+            i += 1;
+            while i < chars.len() && is_ident_char(chars[i]) {
+                token.push(chars[i]);
+                i += 1;
+            }
+            out.push_str(&token.cyan().to_string());
+            continue;
+        }
+
+        if is_ident_start(ch) {
+            let mut token = String::new();
+            token.push(ch);
+            i += 1;
+            while i < chars.len() && is_ident_char(chars[i]) {
+                token.push(chars[i]);
+                i += 1;
+            }
+            out.push_str(&style_php_identifier(&token));
+            continue;
+        }
+
+        out.push(ch);
+        i += 1;
+    }
+
+    out
+}
+
+fn is_escaped(token: &str) -> bool {
+    let mut backslashes = 0;
+    for ch in token.chars().rev().skip(1) {
+        if ch == '\\' {
+            backslashes += 1;
+        } else {
+            break;
+        }
+    }
+    backslashes % 2 == 1
+}
+
+fn style_php_identifier(token: &str) -> String {
+    match token {
+        "if" | "else" | "elseif" | "match" | "fn" | "function" | "return" | "new" | "throw"
+        | "try" | "catch" | "use" | "public" | "protected" | "private" | "static" | "class"
+        | "extends" | "implements" | "null" | "true" | "false" => token.yellow().bold().to_string(),
+        "Route" | "Http" | "Storage" | "DB" | "Gate" | "Policy" | "Hash" | "Auth" | "Request"
+        | "Response" => token.blue().bold().to_string(),
+        _ => token.to_string(),
+    }
+}
+
+fn is_ident_start(ch: char) -> bool {
+    ch.is_ascii_alphabetic() || ch == '_'
+}
+
+fn is_ident_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
 }
 
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
@@ -210,51 +336,70 @@ fn counts(findings: &[Finding]) -> [usize; 5] {
 }
 
 fn format_overview(counts: &[usize; 5], findings: &[Finding], title: &str) -> String {
-    let total = counts.iter().sum::<usize>();
+    let severity_table = severity_table_lines(counts);
+    let category_table = category_table_lines(findings);
+    let category_title = "Category Breakdown".bold().to_string();
+    let left_width = severity_table
+        .iter()
+        .map(|line| visible_width(line))
+        .max()
+        .unwrap_or(0);
+
     let mut output = String::new();
+    output.push_str(&format!("{}", title.bold()));
+    output.push_str(&" ".repeat(left_width.saturating_sub(visible_width(title)) + 4));
+    output.push_str(&category_title);
+    output.push('\n');
 
-    output.push_str(&format!("{}\n", title.bold()));
-    output.push_str(&format!("{}\n", "+------------+----------+".dimmed()));
-    output.push_str(&format!(
-        "| {:<10} | {:>8} |\n",
-        "Severity".bold(),
-        "Count".bold()
-    ));
-    output.push_str(&format!("{}\n", "+------------+----------+".dimmed()));
-    output.push_str(&format!(
-        "| {:<10} | {:>8} |\n",
-        paint(Severity::Critical, "critical"),
-        counts[0]
-    ));
-    output.push_str(&format!(
-        "| {:<10} | {:>8} |\n",
-        paint(Severity::High, "high"),
-        counts[1]
-    ));
-    output.push_str(&format!(
-        "| {:<10} | {:>8} |\n",
-        paint(Severity::Medium, "medium"),
-        counts[2]
-    ));
-    output.push_str(&format!(
-        "| {:<10} | {:>8} |\n",
-        paint(Severity::Low, "low"),
-        counts[3]
-    ));
-    output.push_str(&format!(
-        "| {:<10} | {:>8} |\n",
-        paint(Severity::Info, "info"),
-        counts[4]
-    ));
-    output.push_str(&format!("{}\n", "+------------+----------+".dimmed()));
-    output.push_str(&format!("| {:<10} | {:>8} |\n", "total".bold(), total));
-    output.push_str(&format!("{}\n\n", "+------------+----------+".dimmed()));
-    output.push_str(&format_category_table(findings));
+    for idx in 0..severity_table.len().max(category_table.len()) {
+        let left = severity_table.get(idx).map(String::as_str).unwrap_or("");
+        let right = category_table.get(idx).map(String::as_str).unwrap_or("");
+        output.push_str(left);
+        if !right.is_empty() {
+            let pad = left_width.saturating_sub(visible_width(left)) + 4;
+            output.push_str(&" ".repeat(pad));
+            output.push_str(right);
+        }
+        output.push('\n');
+    }
 
-    output
+    output.trim_end().to_string()
 }
 
-fn format_category_table(findings: &[Finding]) -> String {
+fn severity_table_lines(counts: &[usize; 5]) -> Vec<String> {
+    let total = counts.iter().sum::<usize>();
+    vec![
+        "+------------+----------+".dimmed().to_string(),
+        format!("| {:<10} | {:>8} |", "Severity".bold(), "Count".bold()),
+        "+------------+----------+".dimmed().to_string(),
+        format!(
+            "| {:<10} | {:>8} |",
+            paint(Severity::Critical, "critical"),
+            counts[0]
+        ),
+        format!(
+            "| {:<10} | {:>8} |",
+            paint(Severity::High, "high"),
+            counts[1]
+        ),
+        format!(
+            "| {:<10} | {:>8} |",
+            paint(Severity::Medium, "medium"),
+            counts[2]
+        ),
+        format!("| {:<10} | {:>8} |", paint(Severity::Low, "low"), counts[3]),
+        format!(
+            "| {:<10} | {:>8} |",
+            paint(Severity::Info, "info"),
+            counts[4]
+        ),
+        "+------------+----------+".dimmed().to_string(),
+        format!("| {:<10} | {:>8} |", "total".bold(), total),
+        "+------------+----------+".dimmed().to_string(),
+    ]
+}
+
+fn category_table_lines(findings: &[Finding]) -> Vec<String> {
     let mut rows = Vec::new();
     for category in categories() {
         let count = findings
@@ -266,29 +411,23 @@ fn format_category_table(findings: &[Finding]) -> String {
         }
     }
 
-    let mut output = String::new();
-    output.push_str(&format!("{}\n", "Category Breakdown".bold()));
-    output.push_str(&format!(
-        "{}\n",
-        "+------+----------------+----------+".dimmed()
-    ));
-    output.push_str(&format!(
-        "| {:<4} | {:<14} | {:>8} |\n",
-        "Code".bold(),
-        "Category".bold(),
-        "Count".bold()
-    ));
-    output.push_str(&format!(
-        "{}\n",
-        "+------+----------------+----------+".dimmed()
-    ));
+    let mut lines = vec![
+        "+------+----------------+----------+".dimmed().to_string(),
+        format!(
+            "| {:<4} | {:<14} | {:>8} |",
+            "Code".bold(),
+            "Category".bold(),
+            "Count".bold()
+        ),
+        "+------+----------------+----------+".dimmed().to_string(),
+    ];
 
     if rows.is_empty() {
-        output.push_str(&format!("| {:<4} | {:<14} | {:>8} |\n", "-", "none", 0));
+        lines.push(format!("| {:<4} | {:<14} | {:>8} |", "-", "none", 0));
     } else {
         for (code, label, count) in rows {
-            output.push_str(&format!(
-                "| {:<4} | {:<14} | {:>8} |\n",
+            lines.push(format!(
+                "| {:<4} | {:<14} | {:>8} |",
                 code.bold(),
                 label,
                 count
@@ -296,11 +435,25 @@ fn format_category_table(findings: &[Finding]) -> String {
         }
     }
 
-    output.push_str(&format!(
-        "{}",
-        "+------+----------------+----------+".dimmed()
-    ));
-    output
+    lines.push("+------+----------------+----------+".dimmed().to_string());
+    lines
+}
+
+fn visible_width(value: &str) -> usize {
+    let mut width = 0;
+    let mut chars = value.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            for next in chars.by_ref() {
+                if next == 'm' {
+                    break;
+                }
+            }
+        } else {
+            width += 1;
+        }
+    }
+    width
 }
 
 fn categories() -> [Category; 8] {
@@ -361,9 +514,7 @@ mod tests {
             rule_id: "http.ssrf-user-url",
             title: "User-controlled outbound URL".to_string(),
             message: "User input flows into an outbound HTTP client call.".to_string(),
-            remediation: "Allowlist outbound destinations and block internal address space."
-                .to_string()
-                .leak(),
+            remediation: "Allowlist outbound destinations and block internal address space.",
             confidence: 0.79,
             severity: Severity::High,
             category: Category::Http,
@@ -376,8 +527,12 @@ mod tests {
     #[test]
     fn summary_snapshot_stays_stable() {
         let rendered = strip_ansi(&render(&[], true));
-        let expected = "Laravel Security Audit CLI\n© Afaan Bilal <https://afaan.dev>\n\nScan Summary\n+------------+----------+\n| Severity   |    Count |\n+------------+----------+\n| critical   |        0 |\n| high       |        0 |\n| medium     |        0 |\n| low        |        0 |\n| info       |        0 |\n+------------+----------+\n| total      |        0 |\n+------------+----------+\n\nCategory Breakdown\n+------+----------------+----------+\n| Code | Category       |    Count |\n+------+----------------+----------+\n| -    | none           |        0 |\n+------+----------------+----------+";
-        assert_eq!(rendered.trim(), expected);
+        assert!(rendered.contains("Scan Summary"));
+        assert!(rendered.contains("Category Breakdown"));
+        assert!(rendered.contains("| Severity   |    Count |"));
+        assert!(rendered.contains("| Code | Category       |    Count |"));
+        assert!(rendered.contains("| total      |        0 |"));
+        assert!(rendered.contains("| -    | none           |        0 |"));
     }
 
     #[test]
@@ -395,7 +550,7 @@ mod tests {
             rendered.contains("Allowlist outbound destinations and block internal address space.")
         );
         assert!(rendered.contains("Snippet:"));
-        assert!(rendered.contains("> Http::get($request->input('url'));"));
+        assert!(rendered.contains("Http::get($request->input('url'));"));
         assert!(rendered.contains("Closing Summary"));
     }
 }

@@ -662,6 +662,7 @@
     </div>
     <ul class="nav-links">
       <li><a href="#rules">Rules</a></li>
+      <li><a href="#install">Install</a></li>
       <li><a href="#usage">Usage</a></li>
       <li><a href="#configuration">Config</a></li>
       <li><a href="#ci">CI</a></li>
@@ -904,15 +905,20 @@
 <section id="install">
   <div class="container">
     <p class="section-label">Installation</p>
-    <h2>Build from source</h2>
-    <p class="section-sub">Requires a Rust toolchain. Produces a single standalone binary — no runtime dependencies.</p>
+    <h2>Download the binary</h2>
+    <p class="section-sub">Grab the latest pre-built binary for your platform from <a href="https://github.com/AfaanBilal/lsec/releases">GitHub Releases</a> and drop it on your path — no runtime dependencies required.</p>
 
-    <pre class="code-block" style="margin-bottom:16px;"><code class="language-bash"># Clone and build
-git clone https://github.com/AfaanBilal/lsec
+    <pre class="code-block" style="margin-bottom:16px;"><code class="language-bash"># Linux / macOS
+curl -L https://github.com/AfaanBilal/lsec/releases/latest/download/lsec -o lsec
+chmod +x lsec
+mv lsec /usr/local/bin/lsec</code></pre>
+
+    <h3 style="margin-top:40px; margin-bottom:8px; font-size:0.95rem; color:var(--muted); font-weight:500;">Or build from source</h3>
+    <p style="font-size:0.875rem; color:var(--muted); margin-bottom:16px;">Requires a <a href="https://rustup.rs">Rust toolchain</a>.</p>
+
+    <pre class="code-block" style="margin-bottom:16px;"><code class="language-bash">git clone https://github.com/AfaanBilal/lsec
 cd lsec
 cargo build --release
-
-# Binary is at target/release/lsec
 cp target/release/lsec /usr/local/bin/lsec</code></pre>
 
     <pre class="code-block"><code class="language-bash"># Or run directly without installing

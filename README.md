@@ -392,6 +392,14 @@ src/
 findings as prompts for investigation, especially for high- and critical-level
 results. A clean scan does not guarantee a secure application.
 
+## Contributing
+
+All contributions are welcome. Please create an issue first for any feature request
+or bug.
+
 ## License
+
+**lsec** is released under the MIT License.
+Check out the full license [here](LICENSE).
 
 Copyright (c) 2026 Afaan Bilal <https://afaan.dev>

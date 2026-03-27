@@ -12,10 +12,16 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 5] = [
+const RULES: [RuleMeta; 8] = [
     RuleMeta {
         id: "auth.missing-route-auth",
         title: "Sensitive routes may be missing auth middleware",
+        category: Category::Auth,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "auth.missing-route-authorization",
+        title: "Sensitive routes may be missing authorization checks",
         category: Category::Auth,
         default_severity: Severity::High,
     },
@@ -43,6 +49,18 @@ const RULES: [RuleMeta; 5] = [
         category: Category::Auth,
         default_severity: Severity::High,
     },
+    RuleMeta {
+        id: "auth.impersonation-feature",
+        title: "User impersonation feature detected",
+        category: Category::Auth,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "auth.user-controlled-role-assignment",
+        title: "User-controlled role or permission assignment",
+        category: Category::Auth,
+        default_severity: Severity::High,
+    },
 ];
 
 pub fn metadata() -> Vec<RuleMeta> {
@@ -58,9 +76,18 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     let sensitive_route_re =
         Regex::new(r"Route::(get|post|put|patch|delete|any|match|resource|apiResource)\(")
             .expect("valid regex");
-    let sensitive_hint_re =
-        Regex::new(r"(admin|account|billing|profile|settings|users|orders)").expect("valid regex");
+    let sensitive_hint_re = Regex::new(
+        r"(admin|account|billing|profile|settings|users|orders|roles|permissions|telescope|horizon)",
+    )
+    .expect("valid regex");
     let weak_hash_re = Regex::new(r"\b(md5|sha1)\s*\(").expect("valid regex");
+    let impersonation_re =
+        Regex::new(r"(?i)(impersonat(e|ion)|loginAs\s*\(|becomeUser\s*\()")
+            .expect("valid regex");
+    let role_assignment_re = Regex::new(
+        r"(assignRole|syncRoles|givePermissionTo|syncPermissions)\s*\([^)]*(Request::(input|get)|\$request->(input|get|all|validated|query))",
+    )
+    .expect("valid regex");
 
     for file in project.files_under("routes/") {
         if !file.relative_path.ends_with(".php") {
@@ -79,19 +106,35 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                 active_groups.push(GroupContext {
                     start_depth: brace_depth + count_open_braces(line),
                     has_auth_middleware: has_auth_middleware(&normalized),
+                    has_authorization: has_authorization_hint(&normalized),
                 });
             }
 
             let inherited_auth = active_groups.iter().any(|group| group.has_auth_middleware);
+            let inherited_authorization =
+                active_groups.iter().any(|group| group.has_authorization);
             let sensitive_route =
                 sensitive_route_re.is_match(line) && sensitive_hint_re.is_match(&normalized);
-            if sensitive_route && !has_auth_middleware(&normalized) && !inherited_auth {
+            let route_has_auth = has_auth_middleware(&normalized) || inherited_auth;
+            let route_has_authorization =
+                has_authorization_hint(&normalized) || inherited_authorization;
+
+            if sensitive_route && !route_has_auth {
                 findings.push(make_finding(
                     RULES[0],
                     Some(&file.relative_path),
                     Some(idx + 1),
                     "Sensitive-looking route without explicit auth middleware",
                     "This route looks sensitive based on its URI/name, but no auth middleware was found on the route line or any active enclosing route group.",
+                    Some(line.trim().to_string()),
+                ));
+            } else if sensitive_route && route_has_auth && !route_has_authorization {
+                findings.push(make_finding(
+                    RULES[1],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Sensitive-looking route lacks an obvious authorization gate",
+                    "Authentication was found, but no nearby policy, gate, permission, or role-based authorization hint was detected for this sensitive route.",
                     Some(line.trim().to_string()),
                 ));
             }
@@ -112,7 +155,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     });
     if !model_files.is_empty() && !has_policy_dir && !has_gate_defs {
         findings.push(make_finding(
-            RULES[1],
+            RULES[2],
             None,
             None,
             "Models found without visible authorization rules",
@@ -125,11 +168,31 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
         for (idx, line) in file.content.lines().enumerate() {
             if weak_hash_re.is_match(line) {
                 findings.push(make_finding(
-                    RULES[2],
+                    RULES[3],
                     Some(&file.relative_path),
                     Some(idx + 1),
                     "Weak password hashing primitive detected",
                     "md5/sha1 are not appropriate for password hashing. Use Laravel Hash::make with bcrypt or argon2.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if role_assignment_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[7],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Role or permission assignment appears request-controlled",
+                    "Assigning roles or permissions directly from request input can allow privilege escalation unless the input is tightly authorized and validated.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if impersonation_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[6],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Impersonation capability detected",
+                    "User impersonation features should be tightly gated, audited, and disabled outside trusted administrator workflows.",
                     Some(line.trim().to_string()),
                 ));
             }
@@ -155,7 +218,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     });
     if password_handling_present && !modern_hash_present {
         findings.push(make_finding(
-            RULES[4],
+            RULES[5],
             None,
             None,
             "Password handling detected without modern hashing call sites",
@@ -181,7 +244,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
             if let Some(file) = file {
                 let line = find_line(&file.content, "remember_token").or(Some(1));
                 findings.push(make_finding(
-                    RULES[3],
+                    RULES[4],
                     Some(&file.relative_path),
                     line,
                     "Remember-me tokens found without obvious expiry policy",
@@ -199,6 +262,7 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
 struct GroupContext {
     start_depth: usize,
     has_auth_middleware: bool,
+    has_authorization: bool,
 }
 
 fn is_group_start(line: &str) -> bool {
@@ -209,9 +273,19 @@ fn has_auth_middleware(line: &str) -> bool {
     line.contains("middleware(")
         && (line.contains("auth")
             || line.contains("verified")
-            || line.contains("can:")
+            || line.contains("sanctum")
+            || line.contains("auth:"))
+}
+
+fn has_authorization_hint(line: &str) -> bool {
+    (line.contains("middleware(")
+        && (line.contains("can:")
             || line.contains("permission:")
-            || line.contains("role:"))
+            || line.contains("role:")))
+        || line.contains("->can(")
+        || line.contains("authorize(")
+        || line.contains("Gate::allows(")
+        || line.contains("Gate::authorize(")
 }
 
 fn count_open_braces(line: &str) -> usize {

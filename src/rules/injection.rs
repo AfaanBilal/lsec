@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::make_finding;
 
-const RULES: [RuleMeta; 4] = [
+const RULES: [RuleMeta; 7] = [
     RuleMeta {
         id: "injection.raw-sql-interpolation",
         title: "Raw SQL with interpolation",
@@ -37,6 +37,24 @@ const RULES: [RuleMeta; 4] = [
         category: Category::Injection,
         default_severity: Severity::Critical,
     },
+    RuleMeta {
+        id: "injection.command-exec",
+        title: "Command execution primitive",
+        category: Category::Injection,
+        default_severity: Severity::Critical,
+    },
+    RuleMeta {
+        id: "injection.unserialize",
+        title: "PHP unserialize() usage",
+        category: Category::Injection,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "injection.dynamic-include",
+        title: "Dynamic include or require path",
+        category: Category::Injection,
+        default_severity: Severity::High,
+    },
 ];
 
 pub fn metadata() -> Vec<RuleMeta> {
@@ -56,6 +74,11 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
         Regex::new(r"(where|orWhere|orderBy|groupBy)\s*\([^)]*(Request::(input|get)|\$request->(input|get|query))")
             .expect("valid regex");
     let eval_re = Regex::new(r"\beval\s*\(").expect("valid regex");
+    let cmd_exec_re = Regex::new(r"\b(exec|shell_exec|system|passthru|proc_open|popen)\s*\(")
+        .expect("valid regex");
+    let unserialize_re = Regex::new(r"\bunserialize\s*\(").expect("valid regex");
+    let dynamic_include_re = Regex::new(r"\b(include|include_once|require|require_once)\s*\([^)]*\$")
+        .expect("valid regex");
 
     for file in project.files_with_extension("php") {
         let has_fillable = file.content.contains("$fillable");
@@ -109,6 +132,36 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "eval() detected",
                     "Dynamic code execution is a high-risk sink and should be removed or heavily constrained.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if cmd_exec_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[4],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Command execution primitive detected",
+                    "Process execution sinks are high-risk when any part of the command can be influenced by user-controlled data.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if unserialize_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[5],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "unserialize() usage detected",
+                    "Untrusted PHP deserialization can enable object injection and gadget-chain execution. Prefer safer structured formats such as JSON.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if dynamic_include_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[6],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Dynamic include/require path detected",
+                    "Including files from dynamic paths can open local file inclusion and code-loading risks if the path is attacker-influenced.",
                     Some(line.trim().to_string()),
                 ));
             }

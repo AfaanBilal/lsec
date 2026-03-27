@@ -46,10 +46,13 @@ fast repository-level static checks against common Laravel security footguns.
 ### Authentication
 
 - sensitive-looking routes without visible auth middleware
+- sensitive routes with auth but no obvious policy, gate, role, or permission check
 - models present without visible Gate or Policy definitions
 - weak password hashing usage such as `md5()` or `sha1()`
 - remember-me token usage without obvious expiry controls
 - password handling without visible modern hashing usage
+- impersonation-style features that need strong gating and auditability
+- role or permission assignment driven directly from request input
 
 ### Injection
 
@@ -57,6 +60,9 @@ fast repository-level static checks against common Laravel security footguns.
 - models missing visible `$fillable` or `$guarded` declarations
 - request input passed directly into query builder clauses
 - `eval()` usage
+- command execution sinks such as `exec()`, `shell_exec()`, or `proc_open()`
+- `unserialize()` usage
+- dynamic `include` / `require` paths
 
 ### HTTP and Session Security
 
@@ -65,6 +71,9 @@ fast repository-level static checks against common Laravel security footguns.
 - wildcard CORS origins in config
 - hardcoded non-localhost `http://` URLs in config or routes
 - wildcard trusted proxy configuration in `TrustProxies`
+- outbound HTTP or file fetches built from user-controlled URLs
+- cloud metadata endpoint references that deserve SSRF review
+- debug tooling routes for Telescope, Horizon, Debugbar, or Ignition that may be exposed
 
 ### Storage and Upload Handling
 
@@ -72,11 +81,17 @@ fast repository-level static checks against common Laravel security footguns.
 - file upload handling without visible validation
 - public storage disk exposure
 - files already present under `storage/app/public/`
+- user-controlled filenames passed into storage helpers
+- archive extraction calls that deserve zip-slip review
+- image processing code that lacks visible upload validation
 
 ### Dependencies
 
-- severely outdated Laravel core versions in `composer.lock`
+- severely outdated Laravel core versions in `composer.lock` or `composer.json`
 - known vulnerable Packagist packages via OSV lookup
+- abandoned Composer packages
+- PHP version constraints that may still permit unsupported runtimes
+- missing `composer.lock` as a reproducibility and auditability gap
 - best-effort notice when the vulnerability database is unreachable
 
 ### Secrets

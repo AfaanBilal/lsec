@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::make_finding;
 
-const RULES: [RuleMeta; 3] = [
+const RULES: [RuleMeta; 6] = [
     RuleMeta {
         id: "storage.user-controlled-path",
         title: "User-controlled file path access",
@@ -31,6 +31,24 @@ const RULES: [RuleMeta; 3] = [
         category: Category::Storage,
         default_severity: Severity::Low,
     },
+    RuleMeta {
+        id: "storage.user-controlled-filename",
+        title: "User-controlled stored filename",
+        category: Category::Storage,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "storage.zip-extract",
+        title: "Archive extraction without obvious path validation",
+        category: Category::Storage,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "storage.image-processing-unvalidated",
+        title: "Image processing without visible upload validation",
+        category: Category::Storage,
+        default_severity: Severity::Medium,
+    },
 ];
 
 pub fn metadata() -> Vec<RuleMeta> {
@@ -43,7 +61,16 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     }
 
     let mut findings = Vec::new();
-    let path_re = Regex::new(r"(Storage::get|file_get_contents)\s*\([^)]*(Request::(input|get)|\$request->(input|get|file)|\$\w+Path)").expect("valid regex");
+    let path_re = Regex::new(r"(Storage::get|file_get_contents)\s*\([^)]*(Request::(input|get)|\$request->(input|get|file)|\$\w+Path)")
+        .expect("valid regex");
+    let filename_re = Regex::new(
+        r"(storeAs|putFileAs|move)\s*\([^)]*(Request::(input|get)|\$request->(input|get|file|all)|\$fileName|\$filename)",
+    )
+    .expect("valid regex");
+    let zip_extract_re = Regex::new(r"(ZipArchive|PharData).*(extractTo|extractTo\s*\()")
+        .expect("valid regex");
+    let image_make_re = Regex::new(r"(Image::make|Intervention\\Image|imagecreatefrom)")
+        .expect("valid regex");
 
     for file in project.files_with_extension("php") {
         let has_upload_handling = file.content.contains("->file(")
@@ -54,7 +81,8 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
             || file.content.contains("Validator::make(")
             || file.content.contains("'mimes:")
             || file.content.contains("'max:")
-            || file.content.contains("'image'");
+            || file.content.contains("'image'")
+            || file.content.contains("'file'");
 
         for (idx, line) in file.content.lines().enumerate() {
             if path_re.is_match(line) {
@@ -64,6 +92,36 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "File access path appears influenced by user input",
                     "Normalize and constrain file paths before using them with Storage::get or file_get_contents to avoid path traversal.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if filename_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[3],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Stored filename appears influenced by request input",
+                    "User-controlled filenames can enable overwrite, confusion, and path-manipulation issues unless normalized and regenerated safely.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if zip_extract_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[4],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Archive extraction call detected",
+                    "Archive extraction should validate entry paths to avoid zip-slip style traversal into unintended directories.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if image_make_re.is_match(line) && !has_validation {
+                findings.push(make_finding(
+                    RULES[5],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Image processing without visible upload validation",
+                    "Image handling should be paired with MIME, size, and type validation before processing attacker-supplied files.",
                     Some(line.trim().to_string()),
                 ));
             }

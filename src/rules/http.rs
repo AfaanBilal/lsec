@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 5] = [
+const RULES: [RuleMeta; 8] = [
     RuleMeta {
         id: "http.csrf-exceptions",
         title: "Routes excluded from CSRF middleware",
@@ -42,6 +42,24 @@ const RULES: [RuleMeta; 5] = [
         title: "Trusted proxies wildcard",
         category: Category::Http,
         default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "http.ssrf-user-url",
+        title: "Outbound request built from user-controlled URL",
+        category: Category::Http,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "http.metadata-endpoint",
+        title: "Cloud metadata endpoint reference",
+        category: Category::Http,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "http.debug-dashboard-exposed",
+        title: "Debug dashboard or tooling route may be exposed",
+        category: Category::Http,
+        default_severity: Severity::High,
     },
 ];
 
@@ -104,6 +122,15 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     }
 
     let http_re = Regex::new(r#"http://[A-Za-z0-9\.\-/:_]+"#).expect("valid regex");
+    let outbound_url_re = Regex::new(
+        r"(Http::(get|post|put|patch|delete|withUrlParameters)|curl_init|file_get_contents|fopen)\s*\([^)]*(Request::(input|get)|\$request->(input|get|query)|\$url)",
+    )
+    .expect("valid regex");
+    let metadata_re = Regex::new(
+        r"(169\.254\.169\.254|metadata\.google\.internal|100\.100\.100\.200/latest/meta-data)",
+    )
+    .expect("valid regex");
+
     if let Some(file) = project.find_file("app/Http/Middleware/TrustProxies.php") {
         if file.content.contains("protected $proxies = '*'")
             || file.content.contains("protected $proxies = \"*\"")
@@ -122,12 +149,37 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     }
 
     for file in project.files_with_extension("php") {
-        if !(file.relative_path.starts_with("config/") || file.relative_path.starts_with("routes/"))
-        {
-            continue;
+        let route_like = file.relative_path.starts_with("routes/");
+        let config_like = file.relative_path.starts_with("config/");
+
+        if route_like {
+            for (idx, line) in file.content.lines().enumerate() {
+                let normalized = line.to_ascii_lowercase();
+                let debug_route = normalized.contains("telescope")
+                    || normalized.contains("horizon")
+                    || normalized.contains("debugbar")
+                    || normalized.contains("ignition");
+                if debug_route
+                    && normalized.contains("route::")
+                    && !normalized.contains("auth")
+                    && !normalized.contains("can:")
+                    && !normalized.contains("local")
+                {
+                    findings.push(make_finding(
+                        RULES[7],
+                        Some(&file.relative_path),
+                        Some(idx + 1),
+                        "Debug tooling route appears broadly reachable",
+                        "Debug dashboards such as Telescope, Horizon, Ignition, or Debugbar should be restricted to trusted environments and authenticated operators.",
+                        Some(line.trim().to_string()),
+                    ));
+                }
+            }
         }
+
         for (idx, line) in file.content.lines().enumerate() {
-            if http_re.is_match(line)
+            if (config_like || route_like)
+                && http_re.is_match(line)
                 && !line.contains("http://localhost")
                 && !line.contains("http://127.0.0.1")
             {
@@ -137,6 +189,26 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "Hardcoded non-HTTPS URL",
                     "Configuration and route code should avoid hardcoded HTTP URLs in production paths.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if outbound_url_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[5],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Outbound request appears to use a user-controlled URL",
+                    "Outbound HTTP or file-fetch APIs should not consume attacker-controlled URLs without strict allowlisting and SSRF defenses.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if metadata_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[6],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Cloud metadata endpoint reference detected",
+                    "Code that touches cloud instance metadata endpoints needs careful review to avoid SSRF exposure and credential theft.",
                     Some(line.trim().to_string()),
                 ));
             }

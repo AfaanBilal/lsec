@@ -15,7 +15,7 @@ use crate::scanner::Project;
 
 use super::make_finding;
 
-const RULES: [RuleMeta; 3] = [
+const RULES: [RuleMeta; 6] = [
     RuleMeta {
         id: "deps.known-vuln",
         title: "Dependency with known vulnerability",
@@ -34,6 +34,24 @@ const RULES: [RuleMeta; 3] = [
         category: Category::Deps,
         default_severity: Severity::Info,
     },
+    RuleMeta {
+        id: "deps.abandoned-package",
+        title: "Abandoned Composer package",
+        category: Category::Deps,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "deps.old-php-constraint",
+        title: "Outdated PHP version constraint",
+        category: Category::Deps,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "deps.lockfile-missing",
+        title: "composer.lock missing",
+        category: Category::Deps,
+        default_severity: Severity::Info,
+    },
 ];
 
 pub fn metadata() -> Vec<RuleMeta> {
@@ -46,7 +64,52 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     }
 
     let mut findings = Vec::new();
-    let Some(lock_file) = project.find_file("composer.lock") else {
+    let composer_json = project.find_file("composer.json");
+    let lock_file = project.find_file("composer.lock");
+
+    if lock_file.is_none() {
+        if let Some(file) = composer_json {
+            findings.push(make_finding(
+                RULES[5],
+                Some(&file.relative_path),
+                Some(1),
+                "composer.lock not found",
+                "Security and reproducibility checks are more reliable when the lockfile is committed alongside composer.json.",
+                None,
+            ));
+        }
+    }
+
+    if let Some(file) = composer_json {
+        if let Ok(json) = serde_json::from_str::<Value>(&file.content) {
+            if let Some(version) = laravel_version_from_constraints(&json) {
+                if is_old_laravel(&version) {
+                    findings.push(make_finding(
+                        RULES[1],
+                        Some(&file.relative_path),
+                        Some(1),
+                        format!("Laravel constraint {} may be severely outdated", version),
+                        "Older Laravel release lines can fall out of security support. Review the declared framework constraint against the current supported release policy.",
+                        None,
+                    ));
+                }
+            }
+            if let Some(constraint) = php_constraint(&json) {
+                if is_old_php_constraint(&constraint) {
+                    findings.push(make_finding(
+                        RULES[4],
+                        Some(&file.relative_path),
+                        Some(1),
+                        format!("PHP constraint {} may allow unsupported runtimes", constraint),
+                        "Composer allows an older PHP version range. Review whether the project still permits PHP versions that no longer receive security support.",
+                        None,
+                    ));
+                }
+            }
+        }
+    }
+
+    let Some(lock_file) = lock_file else {
         return findings;
     };
 
@@ -68,6 +131,17 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                 None,
             ));
         }
+    }
+
+    for abandoned in collect_abandoned_packages(&json) {
+        findings.push(make_finding(
+            RULES[3],
+            Some(&lock_file.relative_path),
+            Some(1),
+            format!("Abandoned package detected: {}", abandoned),
+            "Composer reports this package as abandoned. Review whether it should be replaced with an actively maintained alternative.",
+            None,
+        ));
     }
 
     match query_osv(&packages) {
@@ -124,14 +198,61 @@ fn collect_packages(root: &Value, field: &str) -> Vec<PackageRef> {
         .collect()
 }
 
+fn collect_abandoned_packages(root: &Value) -> Vec<String> {
+    ["packages", "packages-dev"]
+        .into_iter()
+        .flat_map(|field| {
+            root.get(field)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|pkg| {
+                    let abandoned = pkg.get("abandoned")?;
+                    match abandoned {
+                        Value::Bool(true) => Some(pkg.get("name")?.as_str()?.to_string()),
+                        Value::String(replacement) => Some(format!(
+                            "{} (suggested replacement: {})",
+                            pkg.get("name")?.as_str()?,
+                            replacement
+                        )),
+                        _ => None,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn laravel_version_from_constraints(root: &Value) -> Option<String> {
+    root.get("require")
+        .and_then(Value::as_object)
+        .and_then(|reqs| reqs.get("laravel/framework"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn php_constraint(root: &Value) -> Option<String> {
+    root.get("require")
+        .and_then(Value::as_object)
+        .and_then(|reqs| reqs.get("php"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
 fn is_old_laravel(version: &str) -> bool {
-    let version = version.trim_start_matches('v');
-    let major = version
-        .split('.')
-        .next()
-        .and_then(|part| part.parse::<u64>().ok())
-        .unwrap_or(0);
+    let digits: String = version
+        .chars()
+        .skip_while(|ch| !ch.is_ascii_digit())
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect();
+    let major = digits.parse::<u64>().unwrap_or(0);
     major > 0 && major < 10
+}
+
+fn is_old_php_constraint(constraint: &str) -> bool {
+    ["5.", "7.0", "7.1", "7.2", "7.3", "7.4", "^7", "~7"]
+        .iter()
+        .any(|needle| constraint.contains(needle))
 }
 
 fn query_osv(packages: &[PackageRef]) -> Result<Vec<VulnMatch>, Box<dyn std::error::Error>> {

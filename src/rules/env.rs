@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 5] = [
+const RULES: [RuleMeta; 7] = [
     RuleMeta {
         id: "env.committed-dotenv",
         title: ".env file appears commit-eligible",
@@ -40,6 +40,18 @@ const RULES: [RuleMeta; 5] = [
     RuleMeta {
         id: "env.hardcoded-db-creds",
         title: "Database credentials hardcoded in config",
+        category: Category::Env,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "env.app-url-http",
+        title: "APP_URL uses insecure HTTP",
+        category: Category::Env,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "env.session-secure-cookie-disabled",
+        title: "SESSION_SECURE_COOKIE disabled in production-like environment",
         category: Category::Env,
         default_severity: Severity::High,
     },
@@ -78,6 +90,9 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     let app_key_re = Regex::new(r"(?m)^APP_KEY=(.+)$").expect("valid regex");
     let app_env_re = Regex::new(r"(?m)^APP_ENV=(.+)$").expect("valid regex");
     let app_debug_re = Regex::new(r"(?m)^APP_DEBUG=(.+)$").expect("valid regex");
+    let app_url_re = Regex::new(r"(?m)^APP_URL=(.+)$").expect("valid regex");
+    let secure_cookie_re =
+        Regex::new(r"(?m)^SESSION_SECURE_COOKIE=(.+)$").expect("valid regex");
 
     for file in project.files_under(".env") {
         let app_env = app_env_re
@@ -88,10 +103,19 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
             .captures(&file.content)
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().trim().trim_matches('"').to_ascii_lowercase());
+        let app_url = app_url_re
+            .captures(&file.content)
+            .and_then(|caps| caps.get(1))
+            .map(|m| m.as_str().trim().trim_matches('"').to_string());
+        let secure_cookie = secure_cookie_re
+            .captures(&file.content)
+            .and_then(|caps| caps.get(1))
+            .map(|m| m.as_str().trim().trim_matches('"').to_ascii_lowercase());
+        let production_like = file.relative_path.contains("production")
+            || file.relative_path.contains("prod")
+            || matches!(app_env.as_deref(), Some("production" | "prod"));
 
-        if matches!(app_env.as_deref(), Some("production" | "prod"))
-            && matches!(app_debug.as_deref(), Some("true" | "1"))
-        {
+        if production_like && matches!(app_debug.as_deref(), Some("true" | "1")) {
             let line = find_line(&file.content, "APP_DEBUG=").unwrap_or(1);
             findings.push(make_finding(
                 RULES[1],
@@ -116,6 +140,37 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     "{} declares a non-production APP_ENV value, which can disable production hardening paths.",
                     file.relative_path
                 ),
+                snippet_for_line(&file.content, line),
+            ));
+        }
+
+        if let Some(app_url) = app_url {
+            let app_url_lower = app_url.to_ascii_lowercase();
+            if production_like
+                && app_url_lower.starts_with("http://")
+                && !app_url_lower.contains("localhost")
+                && !app_url_lower.contains("127.0.0.1")
+            {
+                let line = find_line(&file.content, "APP_URL=").unwrap_or(1);
+                findings.push(make_finding(
+                    RULES[5],
+                    Some(&file.relative_path),
+                    Some(line),
+                    "APP_URL uses HTTP in a production-like environment",
+                    "Production-facing Laravel URLs should prefer HTTPS to avoid mixed-content and insecure-origin issues.",
+                    snippet_for_line(&file.content, line),
+                ));
+            }
+        }
+
+        if production_like && matches!(secure_cookie.as_deref(), Some("false" | "0")) {
+            let line = find_line(&file.content, "SESSION_SECURE_COOKIE=").unwrap_or(1);
+            findings.push(make_finding(
+                RULES[6],
+                Some(&file.relative_path),
+                Some(line),
+                "SESSION_SECURE_COOKIE is disabled for a production-like environment",
+                "Laravel session cookies should be marked secure in production-like environments so they are only sent over HTTPS.",
                 snippet_for_line(&file.content, line),
             ));
         }

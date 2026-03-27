@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::make_finding;
 
-const RULES: [RuleMeta; 3] = [
+const RULES: [RuleMeta; 5] = [
     RuleMeta {
         id: "logging.debug-leak",
         title: "Debug mode may leak stack traces",
@@ -31,6 +31,18 @@ const RULES: [RuleMeta; 3] = [
         category: Category::Logging,
         default_severity: Severity::Low,
     },
+    RuleMeta {
+        id: "logging.debug-log-level",
+        title: "Debug log level enabled in production-like environment",
+        category: Category::Logging,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "logging.debug-artifact",
+        title: "Debug helper left in code",
+        category: Category::Logging,
+        default_severity: Severity::Medium,
+    },
 ];
 
 pub fn metadata() -> Vec<RuleMeta> {
@@ -47,9 +59,14 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
         r"Log::(debug|info|warning|error)\s*\([^)]*(password|token|secret|authorization)",
     )
     .expect("valid regex");
+    let debug_artifact_re = Regex::new(r"\b(dd|dump|var_dump|print_r)\s*\(").expect("valid regex");
 
-    for env_file in [".env", ".env.production"] {
+    for env_file in [".env", ".env.production", ".env.prod"] {
         if let Some(file) = project.find_file(env_file) {
+            let production_like = file.relative_path.contains("production")
+                || file.relative_path.contains("prod")
+                || file.content.contains("APP_ENV=production")
+                || file.content.contains("APP_ENV=prod");
             if file.content.contains("APP_DEBUG=true") {
                 findings.push(make_finding(
                     RULES[0],
@@ -58,6 +75,29 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     "Debug mode enabled in environment file",
                     "Laravel debug pages can leak stack traces, credentials, and internal paths.",
                     None,
+                ));
+            }
+            if production_like
+                && (file.content.contains("LOG_LEVEL=debug") || file.content.contains("LOG_LEVEL=trace"))
+            {
+                let marker = if file.content.contains("LOG_LEVEL=debug") {
+                    "LOG_LEVEL=debug"
+                } else {
+                    "LOG_LEVEL=trace"
+                };
+                let line = file
+                    .content
+                    .lines()
+                    .position(|line| line.contains(marker))
+                    .map(|idx| idx + 1)
+                    .or(Some(1));
+                findings.push(make_finding(
+                    RULES[3],
+                    Some(&file.relative_path),
+                    line,
+                    "Verbose log level enabled in a production-like environment",
+                    "Production-like environments should avoid debug or trace logging unless there is a tightly controlled incident response need.",
+                    line.and_then(|line_no| file.content.lines().nth(line_no.saturating_sub(1)).map(|line| line.trim().to_string())),
                 ));
             }
         }
@@ -72,6 +112,16 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "Sensitive data may be written to logs",
                     "Avoid logging passwords, tokens, and authorization headers even at debug level.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if debug_artifact_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[4],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Debug helper call left in code",
+                    "Debug dump helpers can leak sensitive state, interrupt control flow, or expose internal data paths when left in application code.",
                     Some(line.trim().to_string()),
                 ));
             }

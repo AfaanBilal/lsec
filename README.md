@@ -40,6 +40,8 @@ fast repository-level static checks against common Laravel security footguns.
 - production environment filename and `APP_ENV` mismatches
 - weak, placeholder, or trivially short `APP_KEY` values
 - hardcoded database credentials in Laravel config files
+- `APP_URL` using HTTP in production-like environments
+- `SESSION_SECURE_COOKIE=false` in production-like environments
 
 ### Authentication
 
@@ -62,6 +64,7 @@ fast repository-level static checks against common Laravel security footguns.
 - insecure or missing session cookie flags
 - wildcard CORS origins in config
 - hardcoded non-localhost `http://` URLs in config or routes
+- wildcard trusted proxy configuration in `TrustProxies`
 
 ### Storage and Upload Handling
 
@@ -80,12 +83,16 @@ fast repository-level static checks against common Laravel security footguns.
 
 - hardcoded secret-like values in `.php` and `.env` files
 - committed private keys or certificate material
+- URLs with embedded credentials
+- cloud access key-like literals
 - custom secret regex patterns from config
 
 ### Logging
 
 - debug mode enabled in environment files
+- debug or trace log level in production-like environments
 - passwords, tokens, secrets, or auth headers being logged
+- leftover `dd()`, `dump()`, `var_dump()`, or `print_r()` calls
 - missing visible authentication failure logging
 
 ## Installation

@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 4] = [
+const RULES: [RuleMeta; 5] = [
     RuleMeta {
         id: "http.csrf-exceptions",
         title: "Routes excluded from CSRF middleware",
@@ -34,6 +34,12 @@ const RULES: [RuleMeta; 4] = [
     RuleMeta {
         id: "http.insecure-http",
         title: "Hardcoded HTTP URLs",
+        category: Category::Http,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "http.trusted-proxies-wildcard",
+        title: "Trusted proxies wildcard",
         category: Category::Http,
         default_severity: Severity::Medium,
     },
@@ -98,6 +104,23 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     }
 
     let http_re = Regex::new(r#"http://[A-Za-z0-9\.\-/:_]+"#).expect("valid regex");
+    if let Some(file) = project.find_file("app/Http/Middleware/TrustProxies.php") {
+        if file.content.contains("protected $proxies = '*'")
+            || file.content.contains("protected $proxies = \"*\"")
+            || file.content.contains("$proxies = '*';")
+        {
+            let line = find_line(&file.content, "$proxies").unwrap_or(1);
+            findings.push(make_finding(
+                RULES[4],
+                Some(&file.relative_path),
+                Some(line),
+                "TrustProxies middleware trusts all proxies",
+                "Wildcard trusted proxy configuration can make header spoofing easier unless the deployment environment tightly controls upstream proxies.",
+                snippet_for_line(&file.content, line),
+            ));
+        }
+    }
+
     for file in project.files_with_extension("php") {
         if !(file.relative_path.starts_with("config/") || file.relative_path.starts_with("routes/"))
         {

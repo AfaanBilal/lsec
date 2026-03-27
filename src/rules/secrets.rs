@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::make_finding;
 
-const RULES: [RuleMeta; 2] = [
+const RULES: [RuleMeta; 4] = [
     RuleMeta {
         id: "secrets.inline-secret",
         title: "Hardcoded secret-like value",
@@ -22,6 +22,18 @@ const RULES: [RuleMeta; 2] = [
     RuleMeta {
         id: "secrets.private-key",
         title: "Private key or certificate committed",
+        category: Category::Secrets,
+        default_severity: Severity::Critical,
+    },
+    RuleMeta {
+        id: "secrets.embedded-credentials-url",
+        title: "URL with embedded credentials",
+        category: Category::Secrets,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "secrets.cloud-access-key",
+        title: "Cloud access key-like literal",
         category: Category::Secrets,
         default_severity: Severity::Critical,
     },
@@ -42,8 +54,11 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
         r"(?i)sk_live_[A-Za-z0-9]{16,}",
         r"(?i)ghp_[A-Za-z0-9]{20,}",
     ];
-    let private_key_re =
-        Regex::new(r"(?m)^-----BEGIN (RSA )?PRIVATE KEY-----$").expect("valid regex");
+    let private_key_re = Regex::new(r"(?m)^-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----$")
+        .expect("valid regex");
+    let embedded_creds_url_re =
+        Regex::new(r#"https?://[^\s/@:]+:[^\s/@]+@[^\s'"]+"#).expect("valid regex");
+    let cloud_key_re = Regex::new(r#"\b(AKIA|ASIA)[A-Z0-9]{16}\b"#).expect("valid regex");
     let mut patterns = builtins
         .iter()
         .map(|pattern| Regex::new(pattern).expect("valid regex"))
@@ -81,6 +96,26 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "Secret-like literal detected",
                     "This line matches a secret/token pattern. Replace hardcoded credentials with environment-backed secrets management.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if embedded_creds_url_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[2],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "URL with embedded credentials detected",
+                    "Application URLs should not embed usernames or passwords. Move credentials to environment-backed configuration or a secret manager.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if cloud_key_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[3],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Cloud access key-like literal detected",
+                    "This line looks like a cloud access key identifier. Verify that no active credential material has been committed.",
                     Some(line.trim().to_string()),
                 ));
             }

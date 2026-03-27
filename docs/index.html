@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>lsec — Laravel Security Audit CLI</title>
+  <meta name="description" content="lsec is a fast, lightweight Laravel security audit CLI written in Rust. 51 rules across 8 categories. JSON, SARIF, and pretty terminal output." />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #f97316;
+      --accent-dim:#7c3c12;
+      --green:     #3fb950;
+      --red:       #f85149;
+      --yellow:    #d29922;
+      --blue:      #58a6ff;
+      --radius:    6px;
+      --mono:      'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ─────────────────────────────────── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+    .wide      { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+
+    section { padding: 80px 0; }
+    section + section { border-top: 1px solid var(--border); }
+
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .section-sub {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 48px;
+      max-width: 560px;
+    }
+
+    /* ── Nav ─────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(13,17,23,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+    .nav-logo {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .nav-logo-badge {
+      background: var(--accent);
+      color: #000;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.875rem;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-gh {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text) !important;
+      padding: 6px 14px;
+      border-radius: var(--radius);
+      font-size: 0.8rem;
+      font-weight: 500;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .nav-gh:hover { border-color: var(--muted); text-decoration: none !important; }
+
+    /* ── Hero ────────────────────────────────────── */
+    #hero {
+      padding: 100px 0 80px;
+      border-top: none;
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      border-radius: 100px;
+      margin-bottom: 28px;
+    }
+    .hero-eyebrow span { color: var(--accent); }
+    .hero-title {
+      font-size: clamp(2.4rem, 5vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+    .hero-title .hl { color: var(--accent); }
+    .hero-desc {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 600px;
+      line-height: 1.7;
+      margin-bottom: 40px;
+      text-align: justify;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+      text-decoration: none !important;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 600;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-ghost {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--muted); }
+
+    .hero-stats {
+      display: flex;
+      gap: 40px;
+      margin-top: 56px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.03em;
+    }
+    .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Terminal mockup ─────────────────────────── */
+    .terminal {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 48px;
+    }
+    .terminal-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red    { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green  { background: #28c840; }
+    .terminal-title {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      margin-left: 8px;
+    }
+    .terminal-body {
+      padding: 24px 28px;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .t-prompt { color: var(--muted); }
+    .t-cmd    { color: var(--text); }
+    .t-comment { color: #4a5568; }
+    .t-crit   { color: var(--red); font-weight: 600; }
+    .t-high   { color: #ff8c42; font-weight: 600; }
+    .t-med    { color: var(--yellow); font-weight: 600; }
+    .t-low    { color: var(--blue); }
+    .t-info   { color: var(--muted); }
+    .t-ok     { color: var(--green); }
+    .t-dim    { color: #4a5568; }
+    .t-acc    { color: var(--accent); }
+    .t-rule   { color: #a5b4fc; }
+    .t-file   { color: var(--muted); }
+
+    /* ── Code block ──────────────────────────────── */
+    pre, code { font-family: var(--mono); }
+    pre.code-block {
+      background: var(--surface2) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: var(--radius) !important;
+      padding: 20px 24px !important;
+      font-size: 0.82rem !important;
+      line-height: 1.8 !important;
+      overflow-x: auto !important;
+      margin: 0 !important;
+      text-shadow: none !important;
+    }
+    pre.code-block code {
+      background: none !important;
+      text-shadow: none !important;
+      font-family: var(--mono) !important;
+      font-size: inherit !important;
+      color: var(--text);
+    }
+    /* Prism token colour overrides — match site palette */
+    .token.comment, .token.prolog, .token.doctype { color: #546e7a; font-style: italic; }
+    .token.string, .token.attr-value              { color: var(--green); }
+    .token.number                                  { color: #f78c6c; }
+    .token.boolean, .token.important               { color: var(--accent); }
+    .token.keyword                                 { color: var(--accent); }
+    .token.function                                { color: var(--blue); }
+    .token.operator                                { color: var(--text); }
+    .token.punctuation                             { color: var(--muted); }
+    .token.variable                                { color: #c3e88d; }
+    .token.builtin                                 { color: var(--accent); }
+    /* TOML: section headers & keys */
+    .language-toml .token.table                    { color: var(--accent); font-weight: 600; }
+    .language-toml .token.key                      { color: var(--blue); }
+    /* YAML: keys */
+    .language-yaml .token.key.atrule              { color: var(--blue); }
+    .language-yaml .token.atrule                  { color: var(--blue); }
+
+    .inline-code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    /* ── Feature cards ───────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color 0.15s;
+    }
+    .card:hover { border-color: var(--accent-dim); }
+    .card-icon {
+      font-size: 1.4rem;
+      margin-bottom: 14px;
+    }
+    .card p {
+      color: var(--muted);
+      font-size: 0.875rem;
+      line-height: 1.65;
+    }
+
+    /* ── Rule category grid ──────────────────────── */
+    .rules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 12px;
+    }
+    .rule-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: border-color 0.15s;
+    }
+    .rule-card:hover { border-color: var(--border); }
+    .rule-tag {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      background: rgba(249,115,22,0.1);
+      border: 1px solid rgba(249,115,22,0.25);
+      padding: 2px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 10px;
+    }
+    .rule-card h3 { font-size: 0.95rem; margin-bottom: 8px; }
+    .rule-card ul {
+      list-style: none;
+      padding: 0;
+    }
+    .rule-card li {
+      font-size: 0.78rem;
+      color: var(--muted);
+      padding: 2px 0;
+      padding-left: 12px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .rule-card li::before {
+      content: '·';
+      position: absolute;
+      left: 0;
+      color: var(--border);
+    }
+    .rule-count {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 10px;
+      font-family: var(--mono);
+    }
+
+    /* ── Tabs ────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .tab {
+      padding: 10px 20px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s;
+      user-select: none;
+    }
+    .tab.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+    .tab:hover:not(.active) { color: var(--text); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Format cards ────────────────────────────── */
+    .formats {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .format-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .format-badge {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+      display: inline-block;
+    }
+    .badge-pretty  { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
+    .badge-json    { background: rgba(88,166,255,0.15); color: var(--blue);   border: 1px solid rgba(88,166,255,0.3); }
+    .badge-sarif   { background: rgba(249,115,22,0.15); color: var(--accent); border: 1px solid rgba(249,115,22,0.3); }
+    .format-card p { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── CLI usage table ─────────────────────────── */
+    .cli-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 640px) { .cli-grid { grid-template-columns: 1fr; } }
+    .cli-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+    }
+    .cli-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .cli-cmd {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+    .cli-cmd .flag { color: var(--blue); }
+    .cli-cmd .val  { color: var(--accent); }
+
+    /* ── Exit codes ──────────────────────────────── */
+    .exit-codes {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .exit-code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      flex: 1;
+      min-width: 180px;
+    }
+    .exit-num {
+      font-family: var(--mono);
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .exit-0 { color: var(--green); }
+    .exit-1 { color: var(--yellow); }
+    .exit-2 { color: var(--red); }
+    .exit-code p { font-size: 0.82rem; color: var(--muted); }
+
+    /* ── Severity badges ─────────────────────────── */
+    .sev-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .sev {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+    .sev-critical { background: rgba(248,81,73,0.15);  color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
+    .sev-high     { background: rgba(255,140,66,0.15); color: #ff8c42;       border: 1px solid rgba(255,140,66,0.3); }
+    .sev-medium   { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+    .sev-low      { background: rgba(88,166,255,0.15); color: var(--blue);   border: 1px solid rgba(88,166,255,0.3); }
+    .sev-info     { background: rgba(139,148,158,0.15);color: var(--muted);  border: 1px solid rgba(139,148,158,0.3); }
+
+    /* ── CI section ──────────────────────────────── */
+    .ci-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-bottom: 40px;
+      position: relative;
+    }
+    .ci-steps::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 28px;
+      bottom: 28px;
+      width: 1px;
+      background: var(--border);
+    }
+    .ci-step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 16px 0;
+    }
+    .ci-step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      flex-shrink: 0;
+      z-index: 1;
+    }
+    .ci-step-body { padding-top: 4px; }
+    .ci-step-body h4 { font-size: 0.95rem; margin-bottom: 4px; }
+    .ci-step-body p  { font-size: 0.85rem; color: var(--muted); }
+
+    /* ── Footer ──────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+      color: var(--muted);
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-logo {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    footer p { font-size: 0.82rem; }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); }
+
+    /* ── Responsive ──────────────────────────────── */
+    @media (max-width: 768px) {
+      section { padding: 56px 0; }
+      .hero-stats { gap: 24px; }
+      .nav-links { display: none; }
+    }
+
+    /* ── Author ──────────────────────────────────── */
+    .author-card {
+      display: flex;
+      gap: 32px;
+      align-items: flex-start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+    }
+    .author-avatar {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      object-fit: cover;
+    }
+    .author-role {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .author-role a { color: var(--accent); }
+    .author-bio {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.65;
+      margin-bottom: 20px;
+      max-width: 520px;
+    }
+    .author-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .author-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      transition: color 0.15s, border-color 0.15s;
+      text-decoration: none !important;
+    }
+    .author-link:hover { color: var(--text); border-color: var(--muted); }
+    @media (max-width: 600px) {
+      .author-card { flex-direction: column; gap: 20px; }
+    }
+
+    /* ── Scrollbar ───────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────── -->
+<nav>
+  <div class="container nav-inner">
+    <div class="nav-logo">
+      lsec
+      <span class="nav-logo-badge">v0.1.0</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#rules">Rules</a></li>
+      <li><a href="#usage">Usage</a></li>
+      <li><a href="#configuration">Config</a></li>
+      <li><a href="#ci">CI</a></li>
+      <li>
+        <a href="https://github.com/AfaanBilal/lsec" class="nav-gh">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          GitHub
+        </a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-eyebrow">
+      Written in <span>Rust</span> &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; 51 rules
+    </div>
+    <h1 class="hero-title">
+      Security audits for<br>
+      <span class="hl">Laravel</span> apps.
+    </h1>
+    <p class="hero-desc">
+      Fast, static, heuristic-based. Scan a Laravel project for insecure patterns, risky config, exposed secrets, and vulnerable dependencies — then ship a SARIF report to your CI pipeline.
+    </p>
+    <div class="hero-actions">
+      <a href="#usage" class="btn btn-primary">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm3.54 5.54l-5 5a.75.75 0 01-1.06 0l-2-2a.75.75 0 011.06-1.06l1.47 1.47 4.47-4.47a.75.75 0 011.06 1.06z"/></svg>
+        Get Started
+      </a>
+      <a href="https://github.com/AfaanBilal/lsec" class="btn btn-ghost">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+
+    <!-- Terminal demo -->
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="terminal-title">bash</span>
+      </div>
+      <div class="terminal-body"><div><span class="t-prompt">$ </span><span class="t-cmd">lsec scan . --ci --fail-on high</span></div>
+<div><span class="t-acc" style="font-weight:700">Laravel Security Audit CLI</span></div>
+<div><span class="t-dim">© Afaan Bilal &lt;https://afaan.dev&gt;</span></div>
+<div><span class="t-crit">[CRITICAL]</span><span class="t-dim">  </span><span class="t-rule">env.weak-app-key</span><span class="t-dim">            APP_KEY looks weak or default          </span><span class="t-file">.env:1</span></div>
+<div><span class="t-high">[HIGH]    </span><span class="t-dim">  </span><span class="t-rule">secrets.hardcoded-secret</span><span class="t-dim">    Hardcoded secret-like value detected   </span><span class="t-file">config/services.php:12</span></div>
+<div><span class="t-high">[HIGH]    </span><span class="t-dim">  </span><span class="t-rule">injection.raw-sql</span><span class="t-dim">           Raw SQL query with interpolated input  </span><span class="t-file">app/Repos/UserRepo.php:47</span></div>
+<div><span class="t-high">[HIGH]    </span><span class="t-dim">  </span><span class="t-rule">auth.weak-password-hash</span><span class="t-dim">     Weak hashing primitive detected        </span><span class="t-file">app/Models/User.php:91</span></div>
+<div><span class="t-med">[MEDIUM]  </span><span class="t-dim">  </span><span class="t-rule">http.csrf-exceptions</span><span class="t-dim">        Route excluded from CSRF middleware     </span><span class="t-file">Http/Middleware/Csrf.php:18</span></div>
+<div><span class="t-med">[MEDIUM]  </span><span class="t-dim">  </span><span class="t-rule">http.cors-wildcard</span><span class="t-dim">          Wildcard CORS origin in production      </span><span class="t-file">config/cors.php:5</span></div>
+<div><span class="t-low">[LOW]     </span><span class="t-dim">  </span><span class="t-rule">logging.debug-artifact</span><span class="t-dim">      Debug helper left in code              </span><span class="t-file">app/Http/Controllers/Api.php:203</span></div>
+<div><span class="t-dim">  </span><span class="t-crit">1 critical</span><span class="t-dim">  ·  </span><span class="t-high">3 high</span><span class="t-dim">  ·  </span><span class="t-med">2 medium</span><span class="t-dim">  ·  </span><span class="t-low">1 low</span><span class="t-dim">  ·  0 info</span></div>
+<div><span class="t-crit">  ✗ CI check failed — findings above threshold (fail-on: high)</span></div>
+</div>
+    </div>
+
+    <div class="hero-stats">
+      <div>
+        <div class="stat-value">51</div>
+        <div class="stat-label">Security rules</div>
+      </div>
+      <div>
+        <div class="stat-value">8</div>
+        <div class="stat-label">Rule categories</div>
+      </div>
+      <div>
+        <div class="stat-value">3</div>
+        <div class="stat-label">Output formats</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Why lsec ──────────────────────────────────── -->
+<section id="why">
+  <div class="container">
+    <p class="section-label">Why lsec</p>
+    <h2>Built for Laravel workflows</h2>
+    <p class="section-sub">Static analysis that understands Laravel conventions — fast enough to run on every commit.</p>
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <h3>Fast by design</h3>
+        <p>Compiled Rust binary. No interpreter, no JVM warmup, no Docker pull. Scan a large Laravel app in seconds.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔍</div>
+        <h3>Laravel-aware</h3>
+        <p>Rules understand Eloquent models, middleware stacks, config conventions, route definitions, and Blade templates.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔧</div>
+        <h3>CI-first</h3>
+        <p>Deterministic exit codes, SARIF output for GitHub Code Scanning, and baseline suppression for managing legacy findings.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎯</div>
+        <h3>High signal</h3>
+        <p>Confidence scoring per finding. Filter out noise with <span class="inline-code">--min-confidence</span> or tune thresholds per rule in config.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Rules ─────────────────────────────────────── -->
+<section id="rules">
+  <div class="container">
+    <p class="section-label">Rule coverage</p>
+    <h2>51 rules across 8 categories</h2>
+    <p class="section-sub">Each category targets a distinct security surface area of a Laravel application.</p>
+    <div class="rules-grid">
+
+      <div class="rule-card">
+        <span class="rule-tag">env</span>
+        <h3>Environment</h3>
+        <div class="rule-count">7 rules</div>
+        <ul>
+          <li>.env commit eligibility</li>
+          <li>APP_DEBUG in production</li>
+          <li>Weak or placeholder APP_KEY</li>
+          <li>Hardcoded DB credentials</li>
+          <li>HTTP APP_URL in production</li>
+          <li>Insecure session cookies</li>
+          <li>APP_ENV mismatches</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">auth</span>
+        <h3>Authentication</h3>
+        <div class="rule-count">8 rules</div>
+        <ul>
+          <li>Routes without auth middleware</li>
+          <li>Auth without policy/gate checks</li>
+          <li>Missing Gate/Policy definitions</li>
+          <li>Weak hashing (md5, sha1)</li>
+          <li>Remember-me without expiry</li>
+          <li>Impersonation without gating</li>
+          <li>Role assignment from input</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">injection</span>
+        <h3>Injection</h3>
+        <div class="rule-count">7 rules</div>
+        <ul>
+          <li>Raw SQL with interpolation</li>
+          <li>Mass assignment / missing $fillable</li>
+          <li>Request input in query builder</li>
+          <li>eval() usage</li>
+          <li>exec() / shell_exec()</li>
+          <li>unserialize() calls</li>
+          <li>Dynamic include/require</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">http</span>
+        <h3>HTTP &amp; Session</h3>
+        <div class="rule-count">8 rules</div>
+        <ul>
+          <li>CSRF exceptions</li>
+          <li>Session cookie security flags</li>
+          <li>Wildcard CORS origins</li>
+          <li>Hardcoded HTTP URLs in config</li>
+          <li>Wildcard trusted proxies</li>
+          <li>SSRF via user-controlled URLs</li>
+          <li>Cloud metadata endpoint refs</li>
+          <li>Exposed debug dashboards</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">storage</span>
+        <h3>Storage</h3>
+        <div class="rule-count">6 rules</div>
+        <ul>
+          <li>User-controlled file paths</li>
+          <li>Upload without validation</li>
+          <li>Public disk exposure</li>
+          <li>Files in storage/app/public</li>
+          <li>User-controlled filenames</li>
+          <li>Zip-slip in archive extraction</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">deps</span>
+        <h3>Dependencies</h3>
+        <div class="rule-count">6 rules</div>
+        <ul>
+          <li>Outdated Laravel core version</li>
+          <li>Known CVEs via OSV lookup</li>
+          <li>Abandoned Composer packages</li>
+          <li>Unsafe PHP version constraints</li>
+          <li>Missing composer.lock</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">secrets</span>
+        <h3>Secrets</h3>
+        <div class="rule-count">4 rules</div>
+        <ul>
+          <li>Hardcoded secret-like values</li>
+          <li>Committed private keys / certs</li>
+          <li>URLs with embedded credentials</li>
+          <li>Cloud access key literals</li>
+          <li>Custom regex patterns (config)</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <span class="rule-tag">logging</span>
+        <h3>Logging</h3>
+        <div class="rule-count">5 rules</div>
+        <ul>
+          <li>Debug mode leaking stack traces</li>
+          <li>Debug/trace log level in prod</li>
+          <li>Sensitive data being logged</li>
+          <li>dd() / dump() artifacts</li>
+          <li>Missing auth failure logging</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Installation ──────────────────────────────── -->
+<section id="install">
+  <div class="container">
+    <p class="section-label">Installation</p>
+    <h2>Build from source</h2>
+    <p class="section-sub">Requires a Rust toolchain. Produces a single standalone binary — no runtime dependencies.</p>
+
+    <pre class="code-block" style="margin-bottom:16px;"><code class="language-bash"># Clone and build
+git clone https://github.com/AfaanBilal/lsec
+cd lsec
+cargo build --release
+
+# Binary is at target/release/lsec
+cp target/release/lsec /usr/local/bin/lsec</code></pre>
+
+    <pre class="code-block"><code class="language-bash"># Or run directly without installing
+cargo run -- scan /path/to/laravel-app</code></pre>
+  </div>
+</section>
+
+<!-- ── Usage ─────────────────────────────────────── -->
+<section id="usage">
+  <div class="container">
+    <p class="section-label">Usage</p>
+    <h2>CLI reference</h2>
+    <p class="section-sub">Run a scan, list rules, or manage baselines. All options can also be set in <span class="inline-code">lsec.toml</span>.</p>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab(this,'tab-scan')">Scan</div>
+      <div class="tab" onclick="switchTab(this,'tab-filter')">Filtering</div>
+      <div class="tab" onclick="switchTab(this,'tab-output')">Output</div>
+      <div class="tab" onclick="switchTab(this,'tab-baseline')">Baseline</div>
+    </div>
+
+    <div id="tab-scan" class="tab-content active">
+      <div class="cli-grid">
+        <div class="cli-item">
+          <div class="cli-label">Basic scan</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">List all rules</div>
+          <div class="cli-cmd">lsec rules</div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Summary only</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--summary</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Quiet (findings only)</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--quiet</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Custom config file</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--config</span> <span class="val">ci/lsec.toml</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Ignore low-confidence</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--min-confidence</span> <span class="val">0.8</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-filter" class="tab-content">
+      <div class="cli-grid">
+        <div class="cli-item">
+          <div class="cli-label">Scan only selected categories</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--only</span> <span class="val">env,secrets,deps</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Skip categories</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--skip</span> <span class="val">logging,http</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Scan only specific rules</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--only-rule</span> <span class="val">http.ssrf-user-url,secrets.private-key</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Skip specific rules</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--skip-rule</span> <span class="val">logging.debug-artifact</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-output" class="tab-content">
+      <div class="cli-grid">
+        <div class="cli-item">
+          <div class="cli-label">Pretty terminal (default)</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--format</span> <span class="val">pretty</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">JSON to file</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--format</span> <span class="val">json</span> <span class="flag">--output</span> <span class="val">report.json</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">SARIF for CI/GitHub</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--format</span> <span class="val">sarif</span> <span class="flag">--output</span> <span class="val">report.sarif</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">CI mode, fail on high</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--ci</span> <span class="flag">--fail-on</span> <span class="val">high</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-baseline" class="tab-content">
+      <div class="cli-grid">
+        <div class="cli-item">
+          <div class="cli-label">Write baseline during scan</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--write-baseline</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Write baseline explicitly</div>
+          <div class="cli-cmd">lsec baseline write <span class="val">.</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Use existing baseline</div>
+          <div class="cli-cmd">lsec scan <span class="val">.</span> <span class="flag">--baseline</span> <span class="val">ci/lsec-baseline.json</span></div>
+        </div>
+        <div class="cli-item">
+          <div class="cli-label">Remove stale entries</div>
+          <div class="cli-cmd">lsec baseline prune <span class="val">.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exit codes -->
+    <h3 style="margin-top:48px; margin-bottom:16px;">Exit codes</h3>
+    <div class="exit-codes">
+      <div class="exit-code">
+        <div class="exit-num exit-0">0</div>
+        <p>Scan completed. No findings at or above the configured failure threshold.</p>
+      </div>
+      <div class="exit-code">
+        <div class="exit-num exit-1">1</div>
+        <p><span class="inline-code">--ci</span> was enabled and at least one finding met or exceeded <span class="inline-code">--fail-on</span>.</p>
+      </div>
+      <div class="exit-code">
+        <div class="exit-num exit-2">2</div>
+        <p>CLI or runtime error (invalid path, bad config, etc).</p>
+      </div>
+    </div>
+
+    <!-- Severity -->
+    <h3 style="margin-top:40px; margin-bottom:8px;">Severity levels</h3>
+    <p style="font-size:0.875rem; color:var(--muted); margin-bottom:4px;">Used for <span class="inline-code">--fail-on</span>. Each level includes all levels above it.</p>
+    <div class="sev-row">
+      <span class="sev sev-critical">CRITICAL</span>
+      <span class="sev sev-high">HIGH</span>
+      <span class="sev sev-medium">MEDIUM</span>
+      <span class="sev sev-low">LOW</span>
+      <span class="sev sev-info">INFO</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Output formats ────────────────────────────── -->
+<section id="formats">
+  <div class="container">
+    <p class="section-label">Output formats</p>
+    <h2>Three formats, one command</h2>
+    <p class="section-sub">Switch between human-readable output, machine-parseable JSON, and SARIF for tooling integration.</p>
+    <div class="formats">
+      <div class="format-card">
+        <span class="format-badge badge-pretty">pretty</span>
+        <h3>Terminal</h3>
+        <p>Color-coded severity badges, two-column layout with location, explanation, remediation, and snippet context. Starts and ends with tabular summaries by severity and category.</p>
+        <pre class="code-block" style="margin-top:16px; font-size:0.76rem;"><code class="language-bash">lsec scan .</code></pre>
+      </div>
+      <div class="format-card">
+        <span class="format-badge badge-json">json</span>
+        <h3>JSON</h3>
+        <p>Machine-readable output with scan root, severity counts, category counts, and a full findings array including remediation text and confidence score. Ideal for custom tooling.</p>
+        <pre class="code-block" style="margin-top:16px; font-size:0.76rem;"><code class="language-bash">lsec scan . --format json \
+  --output report.json</code></pre>
+      </div>
+      <div class="format-card">
+        <span class="format-badge badge-sarif">sarif</span>
+        <h3>SARIF 2.1.0</h3>
+        <p>Industry-standard format for security tool integrations. Supports GitHub Code Scanning, Azure DevOps, and IDE extensions. Includes tool metadata, rule definitions, and source locations.</p>
+        <pre class="code-block" style="margin-top:16px; font-size:0.76rem;"><code class="language-bash">lsec scan . --format sarif \
+  --output report.sarif</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Configuration ─────────────────────────────── -->
+<section id="configuration">
+  <div class="container">
+    <p class="section-label">Configuration</p>
+    <h2>lsec.toml</h2>
+    <p class="section-sub">Drop an <span class="inline-code">lsec.toml</span> in your project root to persist scan settings. Override with <span class="inline-code">--config &lt;path&gt;</span>.</p>
+
+    <pre class="code-block"><code class="language-toml"># lsec.toml
+
+[scan]
+exclude_paths  = ["vendor/", "tests/", "node_modules/", ".git/", "storage/logs/"]
+fail_on        = "high"   # CI failure threshold: critical | high | medium | low | info
+min_confidence = 0.7      # Global confidence floor (0.0 – 1.0)
+
+[rules]
+skip     = ["logging"]                   # Skip entire categories
+skip_ids = ["logging.debug-artifact"]    # Skip specific rule IDs
+
+# Per-rule confidence overrides (inline table — must stay on one line)
+min_confidence_overrides = { "auth.missing-route-authorization" = 0.8, "logging.auth-failure-missing" = 0.55 }
+
+# Custom secret detection patterns (regex)
+custom_secrets_patterns = [
+  "(?i)internal_token\\s*=\\s*['\"][A-Za-z0-9_-]{20,}['\"]",
+  "(?i)acme_live_[A-Za-z0-9]{24,}"
+]</code></pre>
+
+    <div class="cards" style="margin-top:32px;">
+      <div class="card">
+        <h3><span class="inline-code">[scan]</span></h3>
+        <p style="margin-top:10px;"><strong style="color:var(--text);">exclude_paths</strong> — path prefixes excluded from the project walk.<br><br>
+        <strong style="color:var(--text);">fail_on</strong> — default CI severity threshold.<br><br>
+        <strong style="color:var(--text);">min_confidence</strong> — global confidence floor before reporting.</p>
+      </div>
+      <div class="card">
+        <h3><span class="inline-code">[rules]</span></h3>
+        <p style="margin-top:10px;"><strong style="color:var(--text);">skip</strong> — suppress entire categories.<br><br>
+        <strong style="color:var(--text);">skip_ids</strong> — suppress individual rules by exact ID.<br><br>
+        <strong style="color:var(--text);">custom_secrets_patterns</strong> — add your own regex patterns for secret detection.<br><br>
+        <strong style="color:var(--text);">min_confidence_overrides</strong> — per-rule confidence floors.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CI ────────────────────────────────────────── -->
+<section id="ci">
+  <div class="container">
+    <p class="section-label">CI Integration</p>
+    <h2>Gate every deploy</h2>
+    <p class="section-sub">Wire lsec into your pipeline in four steps. Works with GitHub Actions, GitLab CI, Bitbucket Pipelines, and any CI that supports shell commands.</p>
+
+    <div class="ci-steps">
+      <div class="ci-step">
+        <div class="ci-step-num">1</div>
+        <div class="ci-step-body">
+          <h4>Run lsec on your checked-out project</h4>
+          <p>Point it at the Laravel root. Use <span class="inline-code">--ci</span> to enable non-zero exit on findings.</p>
+        </div>
+      </div>
+      <div class="ci-step">
+        <div class="ci-step-num">2</div>
+        <div class="ci-step-body">
+          <h4>Load a baseline for known legacy findings</h4>
+          <p>Use <span class="inline-code">--baseline ci/lsec-baseline.json</span> to suppress accepted findings without silencing new ones.</p>
+        </div>
+      </div>
+      <div class="ci-step">
+        <div class="ci-step-num">3</div>
+        <div class="ci-step-body">
+          <h4>Archive the SARIF report</h4>
+          <p>Upload <span class="inline-code">report.sarif</span> as a build artifact or to GitHub Code Scanning for inline PR annotations.</p>
+        </div>
+      </div>
+      <div class="ci-step">
+        <div class="ci-step-num">4</div>
+        <div class="ci-step-body">
+          <h4>Fail the job on threshold breach</h4>
+          <p>Exit code <span class="inline-code">1</span> when any finding meets or exceeds <span class="inline-code">--fail-on</span>. Exit code <span class="inline-code">0</span> on clean scan.</p>
+        </div>
+      </div>
+    </div>
+
+    <pre class="code-block"><code class="language-bash"># Full CI command
+lsec scan . \
+  --ci \
+  --fail-on high \
+  --min-confidence 0.7 \
+  --baseline ci/lsec-baseline.json \
+  --format sarif \
+  --output report.sarif</code></pre>
+
+    <pre class="code-block" style="margin-top:16px;"><code class="language-yaml"># GitHub Actions example
+- name: Run lsec
+  run: |
+    lsec scan . --ci --fail-on high \
+      --format sarif --output lsec.sarif
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: lsec.sarif</code></pre>
+  </div>
+</section>
+
+<!-- ── Baseline ──────────────────────────────────── -->
+<section id="baseline">
+  <div class="container">
+    <p class="section-label">Baseline management</p>
+    <h2>Suppress known findings</h2>
+    <p class="section-sub">Baseline files let you acknowledge legacy issues without silencing future ones. Each entry is fingerprinted by rule, file, and line.</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">📝</div>
+        <h3>Write a baseline</h3>
+        <p>Captures all current findings into a JSON file. Future scans suppress any finding whose fingerprint appears in the baseline.</p>
+        <pre class="code-block" style="margin-top:16px; font-size:0.78rem;"><code class="language-bash">lsec baseline write .
+# or during scan:
+lsec scan . --write-baseline</code></pre>
+      </div>
+      <div class="card">
+        <div class="card-icon">✂️</div>
+        <h3>Prune stale entries</h3>
+        <p>After fixing findings, prune removes fingerprints that no longer match any active finding, keeping the baseline file clean.</p>
+        <pre class="code-block" style="margin-top:16px; font-size:0.78rem;"><code class="language-bash">lsec baseline prune .</code></pre>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔒</div>
+        <h3>Use in CI</h3>
+        <p>Commit the baseline and reference it in your pipeline. New findings always surface; acknowledged ones stay quiet.</p>
+        <pre class="code-block" style="margin-top:16px; font-size:0.78rem;"><code class="language-bash">lsec scan . \
+  --baseline ci/lsec-baseline.json</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Author ───────────────────────────────────── -->
+<section id="author">
+  <div class="container">
+    <p class="section-label">Author</p>
+    <div class="author-card">
+      <img class="author-avatar" src="https://afaan.dev/assets/afaan.png" alt="Afaan Bilal" />
+      <div class="author-info">
+        <h2 style="margin-bottom:4px;">Afaan Bilal</h2>
+        <p class="author-role">Principal Software Engineer &amp; CISO at <a href="https://centiment.co">Centiment</a></p>
+        <div class="author-links">
+          <a href="https://afaan.dev" class="author-link" title="Website" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            afaan.dev
+          </a>
+          <a href="https://github.com/AfaanBilal" class="author-link" title="GitHub" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </a>
+          <a href="https://linkedin.com/in/AfaanBilal" class="author-link" title="LinkedIn" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+          </a>
+          <a href="https://afaan.medium.com" class="author-link" title="Medium" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13.54 12a6.8 6.8 0 01-6.77 6.82A6.8 6.8 0 010 12a6.8 6.8 0 016.77-6.82A6.8 6.8 0 0113.54 12zM20.96 12c0 3.54-1.51 6.42-3.38 6.42-1.87 0-3.39-2.88-3.39-6.42s1.52-6.42 3.39-6.42 3.38 2.88 3.38 6.42M24 12c0 3.17-.53 5.75-1.19 5.75-.66 0-1.19-2.58-1.19-5.75s.53-5.75 1.19-5.75C23.47 6.25 24 8.83 24 12z"/></svg>
+            Medium
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────── -->
+<footer>
+  <div class="container footer-inner">
+    <div>
+      <div class="footer-logo">lsec</div>
+      <p style="margin-top:6px;">MIT License · Copyright © 2026 <a href="https://afaan.dev" target="_blank">Afaan Bilal</a></p>
+    </div>
+    <div style="text-align:right;">
+      <p><a href="https://github.com/AfaanBilal/lsec" target="_blank">github.com/AfaanBilal/lsec</a></p>
+      <p style="margin-top:4px; font-size:0.78rem;">lsec is a developer aid, not a replacement for a full security review.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-toml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+<script>
+  function switchTab(el, id) {
+    const parent = el.closest('section') || document;
+    parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    parent.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById(id).classList.add('active');
+  }
+</script>
+
+</body>
+</html>

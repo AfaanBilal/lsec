@@ -390,15 +390,74 @@ Checks are heuristic and static. They do not execute the application.
 ### Example
 
 ```bash
-lsec scan . --ci --format sarif --output report.sarif --fail-on high
+lsec scan . \
+  --ci \
+  --fail-on high \
+  --min-confidence 0.7 \
+  --baseline ci/lsec-baseline.json \
+  --format sarif \
+  --output lsec.sarif
 ```
 
 Typical CI flow:
 
 1. run `lsec` on the checked-out Laravel project
 2. optionally load or refresh a baseline file for known legacy findings
-3. archive or upload `report.sarif`
+3. archive or upload `lsec.sarif`
 4. fail the job when findings meet the chosen severity threshold and confidence floor
+
+### GitHub Code Scanning
+
+Add the following workflow to your Laravel project to surface lsec findings
+as inline PR annotations and alerts in the repository's Security tab.
+
+`security-events: write` permission is required for the SARIF upload.
+The upload step uses `if: always()` so findings are visible even when the
+scan fails the job.
+
+Public repositories can use GitHub Code Scanning for free. Private
+repositories require GitHub Advanced Security.
+
+```yaml
+# .github/workflows/lsec.yml
+name: lsec
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download lsec
+        run: |
+          curl -fsSL https://github.com/AfaanBilal/lsec/releases/latest/download/lsec-linux-x86_64.tar.gz \
+            | tar -xz
+          chmod +x lsec
+
+      - name: Run lsec
+        run: |
+          ./lsec scan . \
+            --ci \
+            --fail-on high \
+            --format sarif \
+            --output lsec.sarif
+
+      - name: Upload to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lsec.sarif
+```
 
 ## Current Limitations
 
@@ -425,7 +484,6 @@ Potential future improvements include:
 - richer baseline lifecycle support
 - diff-only scanning for pull requests
 - autofix or remediation suggestions
-- GitHub Actions examples and packaged releases
 
 ## Development
 

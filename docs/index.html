@@ -1196,18 +1196,53 @@ lsec scan . \
   --min-confidence 0.7 \
   --baseline ci/lsec-baseline.json \
   --format sarif \
-  --output report.sarif</code></pre>
+  --output lsec.sarif</code></pre>
 
-    <pre class="code-block" style="margin-top:16px;"><code class="language-yaml"># GitHub Actions example
-- name: Run lsec
-  run: |
-    lsec scan . --ci --fail-on high \
-      --format sarif --output lsec.sarif
+    <h3 style="margin-top:48px; margin-bottom:12px;">GitHub Code Scanning</h3>
+    <p style="font-size:0.875rem; color:var(--muted); margin-bottom:24px;">
+      Add this workflow to your Laravel project to get lsec findings as inline annotations on pull requests and in the repository's Security tab.
+      Requires <span class="inline-code">security-events: write</span> permission. The upload step runs with <span class="inline-code">if: always()</span>
+      so findings are visible even when the scan fails the job.
+    </p>
 
-- name: Upload SARIF
-  uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: lsec.sarif</code></pre>
+    <pre class="code-block"><code class="language-yaml"># .github/workflows/lsec.yml
+name: lsec
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download lsec
+        run: |
+          curl -fsSL https://github.com/AfaanBilal/lsec/releases/latest/download/lsec-linux-x86_64.tar.gz \
+            | tar -xz
+          chmod +x lsec
+
+      - name: Run lsec
+        run: |
+          ./lsec scan . \
+            --ci \
+            --fail-on high \
+            --format sarif \
+            --output lsec.sarif
+
+      - name: Upload to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lsec.sarif</code></pre>
   </div>
 </section>
 

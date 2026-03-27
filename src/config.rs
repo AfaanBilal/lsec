@@ -41,6 +41,8 @@ pub struct RulesConfig {
     #[serde(default)]
     pub skip: Vec<String>,
     #[serde(default)]
+    pub skip_ids: Vec<String>,
+    #[serde(default)]
     pub custom_secrets_patterns: Vec<String>,
 }
 
@@ -68,6 +70,15 @@ impl Config {
             .skip
             .iter()
             .filter_map(|item| Category::parse(item).ok())
+            .collect()
+    }
+
+    pub fn rule_id_skips(&self) -> Vec<String> {
+        self.rules
+            .skip_ids
+            .iter()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
             .collect()
     }
 }

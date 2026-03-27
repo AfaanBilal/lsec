@@ -91,11 +91,28 @@ pub struct Finding {
     pub rule_id: &'static str,
     pub title: String,
     pub message: String,
+    pub remediation: &'static str,
+    pub confidence: f32,
     pub severity: Severity,
     pub category: Category,
     pub file: Option<String>,
     pub line: Option<usize>,
     pub snippet: Option<String>,
+}
+
+impl Finding {
+    pub fn fingerprint(&self) -> String {
+        format!(
+            "{}|{}|{}|{}",
+            self.rule_id,
+            self.file.as_deref().unwrap_or("-"),
+            self.line
+                .map(|line| line.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            self.title
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -112,6 +129,8 @@ pub struct ScanContext {
     pub config: Config,
     pub only: Vec<Category>,
     pub skip: Vec<Category>,
+    pub only_rule_ids: Vec<String>,
+    pub skip_rule_ids: Vec<String>,
     pub ci: bool,
 }
 
@@ -121,5 +140,15 @@ impl ScanContext {
             return false;
         }
         self.only.is_empty() || self.only.contains(&category)
+    }
+
+    pub fn rule_enabled(&self, rule_id: &str, category: Category) -> bool {
+        if !self.category_enabled(category) {
+            return false;
+        }
+        if self.skip_rule_ids.iter().any(|id| id == rule_id) {
+            return false;
+        }
+        self.only_rule_ids.is_empty() || self.only_rule_ids.iter().any(|id| id == rule_id)
     }
 }

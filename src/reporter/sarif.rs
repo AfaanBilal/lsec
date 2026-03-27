@@ -42,6 +42,8 @@ struct Rule {
     id: String,
     name: String,
     short_description: Message,
+    help: Message,
+    properties: Properties,
 }
 
 #[derive(Serialize)]
@@ -50,11 +52,17 @@ struct ResultItem {
     level: String,
     message: Message,
     locations: Vec<Location>,
+    properties: Properties,
 }
 
 #[derive(Serialize)]
 struct Message {
     text: String,
+}
+
+#[derive(Serialize)]
+struct Properties {
+    confidence: f32,
 }
 
 #[derive(Serialize)]
@@ -92,6 +100,12 @@ pub fn render(
             short_description: Message {
                 text: finding.message.clone(),
             },
+            help: Message {
+                text: finding.remediation.to_string(),
+            },
+            properties: Properties {
+                confidence: finding.confidence,
+            },
         });
     }
 
@@ -112,7 +126,7 @@ pub fn render(
                     rule_id: finding.rule_id.to_string(),
                     level: sarif_level(finding.severity).to_string(),
                     message: Message {
-                        text: finding.message.clone(),
+                        text: format!("{} Fix: {}", finding.message, finding.remediation),
                     },
                     locations: vec![Location {
                         physical_location: PhysicalLocation {
@@ -124,6 +138,9 @@ pub fn render(
                             },
                         },
                     }],
+                    properties: Properties {
+                        confidence: finding.confidence,
+                    },
                 })
                 .collect(),
         }],

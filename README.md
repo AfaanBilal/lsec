@@ -152,9 +152,12 @@ lsec rules
 ### Command Overview
 
 ```text
-lsec scan <path> [--only <categories>] [--skip <categories>] [--format <pretty|json|sarif>]
-                 [--output <file>] [--summary] [--quiet] [--ci]
-                 [--fail-on <critical|high|medium|low|info>] [--config <path>]
+lsec scan <path> [--only <categories>] [--skip <categories>]
+                 [--only-rule <ids>] [--skip-rule <ids>]
+                 [--format <pretty|json|sarif>] [--output <file>]
+                 [--summary] [--quiet] [--ci]
+                 [--fail-on <critical|high|medium|low|info>]
+                 [--config <path>] [--baseline <path>] [--write-baseline]
 
 lsec rules
 ```
@@ -191,10 +194,34 @@ lsec scan . --summary
 lsec scan . --only env,secrets,deps
 ```
 
+### Scan Only Specific Rules
+
+```bash
+lsec scan . --only-rule http.ssrf-user-url,secrets.private-key
+```
+
 ### Skip Specific Categories
 
 ```bash
 lsec scan . --skip logging,http
+```
+
+### Skip Specific Rules
+
+```bash
+lsec scan . --skip-rule logging.debug-artifact,auth.impersonation-feature
+```
+
+### Write a Baseline File
+
+```bash
+lsec scan . --write-baseline
+```
+
+### Use an Existing Baseline File
+
+```bash
+lsec scan . --baseline ci/lsec-baseline.json
 ```
 
 ### Use in CI and Fail on Medium or Higher
@@ -238,6 +265,7 @@ fail_on = "high"
 
 [rules]
 skip = ["logging"]
+skip_ids = ["logging.debug-artifact"]
 custom_secrets_patterns = [
   "(?i)internal_token\\s*=\\s*['\\\"][A-Za-z0-9_-]{20,}['\\\"]",
   "(?i)acme_live_[A-Za-z0-9]{24,}"
@@ -260,6 +288,7 @@ Default excluded paths are:
 #### `[rules]`
 
 - `skip`: categories to suppress
+- `skip_ids`: exact rule ids to suppress
 - `custom_secrets_patterns`: additional regex patterns for secret detection
 
 ## Output Formats
@@ -269,10 +298,12 @@ Default excluded paths are:
 The default terminal output prints each finding with:
 
 - severity
-- category
+- category grouping
 - title
 - rule id
+- confidence score
 - explanatory message
+- remediation guidance
 - file and line when available
 - code snippet when available
 
@@ -289,7 +320,8 @@ JSON output includes:
 - scan root
 - whether summary-only mode was used
 - counts by severity
-- findings array
+- counts by category
+- findings array with remediation and confidence
 
 This format is useful for custom automation and post-processing.
 
@@ -300,7 +332,8 @@ SARIF output is suitable for security tooling integrations that accept SARIF
 
 - tool metadata
 - deduplicated rule entries for reported findings
-- result items with severity mapping and source locations
+- remediation help text per rule
+- result items with severity mapping, confidence, and source locations
 
 Current SARIF level mapping:
 
@@ -310,10 +343,18 @@ Current SARIF level mapping:
 
 ## Rule Categories
 
-You can scope scans with `--only` and `--skip` using these category names:
+You can scope scans with category and rule filters.
+
+Category filters:
 
 ```text
 env, auth, injection, http, storage, deps, secrets, logging
+```
+
+Rule filters use exact ids, for example:
+
+```text
+http.ssrf-user-url, secrets.private-key, deps.known-vuln
 ```
 
 ## How Scanning Works
@@ -340,8 +381,9 @@ lsec scan . --ci --format sarif --output report.sarif --fail-on high
 Typical CI flow:
 
 1. run `lsec` on the checked-out Laravel project
-2. archive or upload `report.sarif`
-3. fail the job when findings meet the chosen severity threshold
+2. optionally load a baseline file for known legacy findings
+3. archive or upload `report.sarif`
+4. fail the job when findings meet the chosen severity threshold
 
 ## Current Limitations
 
@@ -375,6 +417,12 @@ Potential future improvements include:
 
 ```bash
 cargo build
+```
+
+### Run Tests
+
+```bash
+cargo test
 ```
 
 ### Run Against This Repo

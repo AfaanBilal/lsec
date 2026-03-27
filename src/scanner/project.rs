@@ -72,6 +72,20 @@ impl Project {
             .filter(|file| file.relative_path.starts_with(prefix))
             .collect()
     }
+
+    #[cfg(test)]
+    pub fn from_test_files(files: &[(&str, &str)]) -> Self {
+        Self {
+            files: files
+                .iter()
+                .map(|(relative_path, content)| ProjectFile {
+                    path: PathBuf::from(relative_path.replace('/', "\\")),
+                    relative_path: (*relative_path).to_string(),
+                    content: (*content).to_string(),
+                })
+                .collect(),
+        }
+    }
 }
 
 fn is_excluded(root: &Path, path: &Path, excludes: &[String]) -> bool {

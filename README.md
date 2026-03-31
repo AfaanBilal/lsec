@@ -3,7 +3,7 @@
 `lsec` is a Laravel security audit CLI written in Rust. It scans a Laravel
 project for common security issues, insecure coding patterns, risky
 configuration, exposed secrets, and dependency concerns, then reports findings
-in human-readable, JSON, or SARIF form. It currently ships 51 rules across 8
+in human-readable, JSON, or SARIF form. It currently ships 61 rules across 8
 categories.
 
 ## Why `lsec`
@@ -43,6 +43,7 @@ fast repository-level static checks against common Laravel security footguns.
 - hardcoded database credentials in Laravel config files
 - `APP_URL` using HTTP in production-like environments
 - `SESSION_SECURE_COOKIE=false` in production-like environments
+- missing `security.txt` file at `public/.well-known/security.txt`
 
 ### Authentication
 
@@ -54,6 +55,7 @@ fast repository-level static checks against common Laravel security footguns.
 - password handling without visible modern hashing usage
 - impersonation-style features that need strong gating and auditability
 - role or permission assignment driven directly from request input
+- controllers using request input without visible validation
 
 ### Injection
 
@@ -64,6 +66,10 @@ fast repository-level static checks against common Laravel security footguns.
 - command execution sinks such as `exec()`, `shell_exec()`, or `proc_open()`
 - `unserialize()` usage
 - dynamic `include` / `require` paths
+- unescaped Blade output (`{!! !!}`) that can introduce XSS
+- XML parsing without entity loading protection (XXE)
+- insecure random functions (`rand()`, `mt_rand()`, `array_rand()`, `shuffle()`)
+- redirect targets built from user input (open redirects)
 
 ### HTTP and Session Security
 
@@ -75,6 +81,10 @@ fast repository-level static checks against common Laravel security footguns.
 - outbound HTTP or file fetches built from user-controlled URLs
 - cloud metadata endpoint references that deserve SSRF review
 - debug tooling routes for Telescope, Horizon, Debugbar, or Ignition that may be exposed
+- auth routes (login, register, password reset) missing rate limiting
+- missing security headers middleware (X-Content-Type-Options, X-Frame-Options, CSP)
+- missing HSTS (`Strict-Transport-Security`) configuration
+- external scripts and stylesheets loaded without Subresource Integrity (SRI)
 
 ### Storage and Upload Handling
 

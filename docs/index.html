@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>lsec — Laravel Security Audit CLI</title>
-  <meta name="description" content="lsec is a fast, lightweight Laravel security audit CLI written in Rust. 51 rules across 8 categories. JSON, SARIF, and pretty terminal output." />
+  <meta name="description" content="lsec is a fast, lightweight Laravel security audit CLI written in Rust. 61 rules across 8 categories. JSON, SARIF, and pretty terminal output." />
   <meta name="author" content="Afaan Bilal" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
   <style>
@@ -682,7 +682,7 @@
 <section id="hero">
   <div class="container">
     <div class="hero-eyebrow">
-      Written in <span>Rust</span> &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; 51 rules
+      Written in <span>Rust</span> &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; 61 rules
     </div>
     <h1 class="hero-title">
       Security audits for<br>
@@ -777,14 +777,14 @@
 <section id="rules">
   <div class="container">
     <p class="section-label">Rule coverage</p>
-    <h2>51 rules across 8 categories</h2>
+    <h2>61 rules across 8 categories</h2>
     <p class="section-sub">Each category targets a distinct security surface area of a Laravel application.</p>
     <div class="rules-grid">
 
       <div class="rule-card">
         <span class="rule-tag">env</span>
         <h3>Environment</h3>
-        <div class="rule-count">7 rules</div>
+        <div class="rule-count">8 rules</div>
         <ul>
           <li>.env commit eligibility</li>
           <li>APP_DEBUG in production</li>
@@ -793,13 +793,14 @@
           <li>HTTP APP_URL in production</li>
           <li>Insecure session cookies</li>
           <li>APP_ENV mismatches</li>
+          <li>Missing security.txt</li>
         </ul>
       </div>
 
       <div class="rule-card">
         <span class="rule-tag">auth</span>
         <h3>Authentication</h3>
-        <div class="rule-count">8 rules</div>
+        <div class="rule-count">9 rules</div>
         <ul>
           <li>Routes without auth middleware</li>
           <li>Auth without policy/gate checks</li>
@@ -809,13 +810,14 @@
           <li>No modern password hashing detected</li>
           <li>Impersonation without gating</li>
           <li>Role assignment from input</li>
+          <li>Missing input validation</li>
         </ul>
       </div>
 
       <div class="rule-card">
         <span class="rule-tag">injection</span>
         <h3>Injection</h3>
-        <div class="rule-count">7 rules</div>
+        <div class="rule-count">11 rules</div>
         <ul>
           <li>Raw SQL with interpolation</li>
           <li>Mass assignment / missing $fillable</li>
@@ -824,13 +826,17 @@
           <li>exec() / shell_exec()</li>
           <li>unserialize() calls</li>
           <li>Dynamic include/require</li>
+          <li>XSS via unescaped Blade output</li>
+          <li>XXE in XML parsing</li>
+          <li>Insecure randomness</li>
+          <li>Open redirects</li>
         </ul>
       </div>
 
       <div class="rule-card">
         <span class="rule-tag">http</span>
         <h3>HTTP &amp; Session</h3>
-        <div class="rule-count">8 rules</div>
+        <div class="rule-count">12 rules</div>
         <ul>
           <li>CSRF exceptions</li>
           <li>Session cookie security flags</li>
@@ -840,6 +846,10 @@
           <li>SSRF via user-controlled URLs</li>
           <li>Cloud metadata endpoint refs</li>
           <li>Exposed debug dashboards</li>
+          <li>Missing rate limiting on auth routes</li>
+          <li>Missing security headers</li>
+          <li>Missing HSTS</li>
+          <li>External assets without SRI</li>
         </ul>
       </div>
 

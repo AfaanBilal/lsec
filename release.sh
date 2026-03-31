@@ -47,8 +47,18 @@ cargo update --workspace --quiet
 sed -i.bak "s|<span class=\"nav-logo-badge\">v[^<]*</span>|<span class=\"nav-logo-badge\">$TAG</span>|" docs/index.html
 rm -f docs/index.html.bak
 
+# Stamp CHANGELOG: rename [Unreleased] to [version] with today's date
+TODAY=$(date +%Y-%m-%d)
+sed -i.bak \
+  -e "s/^## \[Unreleased\]/## [$VERSION] - $TODAY/" \
+  -e "s|^\[Unreleased\]:.*|[Unreleased]: https://github.com/AfaanBilal/lsec/compare/$TAG...HEAD\n[$VERSION]: https://github.com/AfaanBilal/lsec/releases/tag/$TAG|" \
+  CHANGELOG.md
+# Re-add the Unreleased section header
+sed -i.bak "/^## \[$VERSION\]/i ## [Unreleased]\n" CHANGELOG.md
+rm -f CHANGELOG.md.bak
+
 # Commit
-git add Cargo.toml Cargo.lock docs/index.html
+git add Cargo.toml Cargo.lock docs/index.html CHANGELOG.md
 git commit -m "chore: release $TAG"
 
 # Tag and push

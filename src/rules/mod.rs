@@ -189,6 +189,36 @@ pub(crate) fn remediation_for_rule(rule_id: &str) -> &'static str {
         "logging.debug-artifact" => {
             "Remove leftover debug helpers before release so they cannot leak state or disrupt request handling."
         }
+        "injection.xss-unescaped-output" => {
+            "Use {{ }} instead of {!! !!} for Blade output to auto-escape HTML. If raw HTML is required, sanitize with a library like HTMLPurifier."
+        }
+        "injection.xxe" => {
+            "Disable external entity loading when parsing XML. On older PHP versions set libxml_disable_entity_loader(true). Use the latest PHP where it is disabled by default."
+        }
+        "injection.insecure-randomness" => {
+            "Replace rand(), mt_rand(), array_rand(), and shuffle() with cryptographically secure alternatives: random_int(), random_bytes(), or Str::random()."
+        }
+        "injection.open-redirect" => {
+            "Validate redirect targets against an allowlist of trusted URLs or paths. Avoid passing user input directly to redirect()."
+        }
+        "http.rate-limiting-missing" => {
+            "Apply ThrottleRequests middleware or configure a RateLimiter for login, registration, and password reset routes to prevent brute-force attacks."
+        }
+        "http.security-headers-missing" => {
+            "Add middleware to set security headers: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Content-Security-Policy."
+        }
+        "http.hsts-missing" => {
+            "Configure Strict-Transport-Security headers via middleware or web server config to enforce HTTPS-only access."
+        }
+        "http.sri-missing" => {
+            "Add integrity and crossorigin attributes to externally loaded scripts and stylesheets. Use an SRI hash generator if the CDN does not provide one."
+        }
+        "env.missing-security-txt" => {
+            "Create a security.txt file at public/.well-known/security.txt with responsible disclosure contact details. Generate one at https://securitytxt.org/."
+        }
+        "auth.missing-input-validation" => {
+            "Validate all request input using $request->validate(), Validator::make(), or a dedicated FormRequest class before processing."
+        }
         _ => {
             "Review the flagged code path and harden it using least privilege, strict validation, and environment-specific safeguards."
         }
@@ -200,10 +230,18 @@ pub(crate) fn confidence_for_rule(rule_id: &str) -> f32 {
         "deps.known-vuln" => 0.98,
         "secrets.private-key" | "secrets.cloud-access-key" => 0.97,
         "injection.eval" | "injection.command-exec" | "injection.unserialize" => 0.95,
+        "injection.xss-unescaped-output" => 0.92,
+        "injection.xxe" => 0.82,
+        "injection.insecure-randomness" => 0.88,
+        "injection.open-redirect" => 0.72,
+        "http.sri-missing" => 0.9,
         "http.metadata-endpoint" | "http.debug-dashboard-exposed" => 0.85,
         "auth.missing-route-authorization"
         | "auth.missing-policy"
         | "logging.auth-failure-missing" => 0.62,
+        "auth.missing-input-validation" => 0.68,
+        "http.rate-limiting-missing" | "http.security-headers-missing" | "http.hsts-missing" => 0.65,
+        "env.missing-security-txt" => 0.95,
         id if id.starts_with("env.") => 0.88,
         id if id.starts_with("auth.") => 0.76,
         id if id.starts_with("injection.") => 0.87,

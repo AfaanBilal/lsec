@@ -123,5 +123,123 @@ fn respects_confidence_threshold_overrides() {
         .into_iter()
         .filter(|finding| context.confidence_enabled(finding.rule_id, finding.confidence))
         .collect::<Vec<_>>();
-    assert!(findings.is_empty());
+    // The auth.missing-route-authorization finding (confidence 0.62) should be filtered out
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.rule_id == "auth.missing-route-authorization"),
+        "Low-confidence auth finding should be filtered at 0.7 threshold"
+    );
+}
+
+#[test]
+fn detects_xss_unescaped_blade_output() {
+    let project = Project::from_test_files(&[(
+        "resources/views/profile.blade.php",
+        "<div>{!! $user->bio !!}</div>",
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "injection.xss-unescaped-output")
+    );
+}
+
+#[test]
+fn detects_xxe_xml_parsing() {
+    let project = Project::from_test_files(&[(
+        "app/Services/XmlParser.php",
+        "<?php\n$xml = simplexml_load_string($request->input('xml'));",
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "injection.xxe")
+    );
+}
+
+#[test]
+fn detects_insecure_randomness() {
+    let project = Project::from_test_files(&[(
+        "app/Http/Controllers/TokenController.php",
+        "<?php\n$token = mt_rand(100000, 999999);",
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "injection.insecure-randomness")
+    );
+}
+
+#[test]
+fn detects_open_redirect() {
+    let project = Project::from_test_files(&[(
+        "app/Http/Controllers/AuthController.php",
+        "<?php\nreturn redirect($request->input('next'));",
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "injection.open-redirect")
+    );
+}
+
+#[test]
+fn detects_missing_security_txt() {
+    let project = Project::from_test_files(&[(
+        "routes/web.php",
+        "<?php\n// routes",
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "env.missing-security-txt")
+    );
+}
+
+#[test]
+fn detects_missing_input_validation() {
+    let project = Project::from_test_files(&[(
+        "app/Http/Controllers/UserController.php",
+        "<?php\nclass UserController {\n    public function store(Request $request) {\n        User::create($request->all());\n    }\n}",
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "auth.missing-input-validation")
+    );
+}
+
+#[test]
+fn detects_external_script_without_sri() {
+    let project = Project::from_test_files(&[(
+        "resources/views/layout.blade.php",
+        r#"<script src="https://cdn.example.com/lib.js"></script>"#,
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.rule_id == "http.sri-missing")
+    );
+}
+
+#[test]
+fn does_not_flag_sri_when_integrity_present() {
+    let project = Project::from_test_files(&[(
+        "resources/views/layout.blade.php",
+        r#"<script src="https://cdn.example.com/lib.js" integrity="sha384-abc123" crossorigin="anonymous"></script>"#,
+    )]);
+    let findings = run_rules(&project, &context());
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.rule_id == "http.sri-missing")
+    );
 }

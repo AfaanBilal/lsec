@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::make_finding;
 
-const RULES: [RuleMeta; 7] = [
+const RULES: [RuleMeta; 11] = [
     RuleMeta {
         id: "injection.raw-sql-interpolation",
         title: "Raw SQL with interpolation",
@@ -55,6 +55,30 @@ const RULES: [RuleMeta; 7] = [
         category: Category::Injection,
         default_severity: Severity::High,
     },
+    RuleMeta {
+        id: "injection.xss-unescaped-output",
+        title: "Unescaped Blade output",
+        category: Category::Injection,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "injection.xxe",
+        title: "XML parsing without entity loading protection",
+        category: Category::Injection,
+        default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "injection.insecure-randomness",
+        title: "Insecure random function usage",
+        category: Category::Injection,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "injection.open-redirect",
+        title: "Redirect target from user input",
+        category: Category::Injection,
+        default_severity: Severity::Medium,
+    },
 ];
 
 pub fn metadata() -> Vec<RuleMeta> {
@@ -80,6 +104,35 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
     let dynamic_include_re =
         Regex::new(r"\b(include|include_once|require|require_once)\s*\([^)]*\$")
             .expect("valid regex");
+    let xxe_re = Regex::new(
+        r"\b(simplexml_load_string|simplexml_load_file|DOMDocument\s*\(\)|loadXML|SimpleXMLElement)\s*\(",
+    )
+    .expect("valid regex");
+    let insecure_rand_re =
+        Regex::new(r"\b(rand|mt_rand|array_rand|shuffle)\s*\(").expect("valid regex");
+    let open_redirect_re = Regex::new(
+        r"redirect\s*\([^)]*(Request::(input|get)|\$request->(input|get|query)|\$url|\$link|\$next)",
+    )
+    .expect("valid regex");
+
+    // Check Blade templates for unescaped output {!! !!}
+    let blade_unescaped_re = Regex::new(r"\{!!\s*.+\s*!!\}").expect("valid regex");
+    for file in project.files.iter().filter(|f| {
+        f.relative_path.ends_with(".blade.php")
+    }) {
+        for (idx, line) in file.content.lines().enumerate() {
+            if blade_unescaped_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[7],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Unescaped Blade output detected ({!! !!})",
+                    "Using {!! !!} outputs raw HTML without escaping, which can introduce XSS vulnerabilities. Use {{ }} for escaped output or sanitize with HTMLPurifier.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+        }
+    }
 
     for file in project.files_with_extension("php") {
         let has_fillable = file.content.contains("$fillable");
@@ -163,6 +216,41 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "Dynamic include/require path detected",
                     "Including files from dynamic paths can open local file inclusion and code-loading risks if the path is attacker-influenced.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if xxe_re.is_match(line) {
+                let has_entity_loader_guard = file.content.contains("libxml_disable_entity_loader")
+                    || file.content.contains("LIBXML_NOENT")
+                    || file.content.contains("LIBXML_DTDLOAD");
+                if !has_entity_loader_guard {
+                    findings.push(make_finding(
+                        RULES[8],
+                        Some(&file.relative_path),
+                        Some(idx + 1),
+                        "XML parsing without visible entity loading protection",
+                        "XML parsers can be exploited for XXE (XML External Entity) injection. Disable external entity loading or use the latest PHP versions where it is disabled by default.",
+                        Some(line.trim().to_string()),
+                    ));
+                }
+            }
+            if insecure_rand_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[9],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Insecure random function used",
+                    "Functions like rand(), mt_rand(), array_rand(), and shuffle() are not cryptographically secure. Use random_int(), random_bytes(), or Str::random() instead.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+            if open_redirect_re.is_match(line) {
+                findings.push(make_finding(
+                    RULES[10],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "Redirect target appears to come from user input",
+                    "Redirecting to a user-controlled URL can enable open redirect attacks. Validate against an allowlist or use relative paths.",
                     Some(line.trim().to_string()),
                 ));
             }

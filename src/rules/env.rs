@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 7] = [
+const RULES: [RuleMeta; 8] = [
     RuleMeta {
         id: "env.committed-dotenv",
         title: ".env file appears commit-eligible",
@@ -54,6 +54,12 @@ const RULES: [RuleMeta; 7] = [
         title: "SESSION_SECURE_COOKIE disabled in production-like environment",
         category: Category::Env,
         default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "env.missing-security-txt",
+        title: "Missing security.txt file",
+        category: Category::Env,
+        default_severity: Severity::Low,
     },
 ];
 
@@ -216,6 +222,20 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                 ));
             }
         }
+    }
+
+    // Check for security.txt
+    let has_security_txt = project.find_file("public/.well-known/security.txt").is_some()
+        || project.find_file(".well-known/security.txt").is_some();
+    if !has_security_txt {
+        findings.push(make_finding(
+            RULES[7],
+            None,
+            None,
+            "No security.txt file found",
+            "Place a security.txt file at public/.well-known/security.txt with contact details so security researchers can report vulnerabilities. Generate one at https://securitytxt.org/.",
+            None,
+        ));
     }
 
     findings

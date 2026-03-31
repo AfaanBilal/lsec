@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 8] = [
+const RULES: [RuleMeta; 12] = [
     RuleMeta {
         id: "http.csrf-exceptions",
         title: "Routes excluded from CSRF middleware",
@@ -60,6 +60,30 @@ const RULES: [RuleMeta; 8] = [
         title: "Debug dashboard or tooling route may be exposed",
         category: Category::Http,
         default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "http.rate-limiting-missing",
+        title: "Auth routes missing rate limiting",
+        category: Category::Http,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "http.security-headers-missing",
+        title: "Security headers middleware not detected",
+        category: Category::Http,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "http.hsts-missing",
+        title: "HSTS header not configured",
+        category: Category::Http,
+        default_severity: Severity::Medium,
+    },
+    RuleMeta {
+        id: "http.sri-missing",
+        title: "External script or style loaded without SRI",
+        category: Category::Http,
+        default_severity: Severity::Low,
     },
 ];
 
@@ -209,6 +233,86 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
                     Some(idx + 1),
                     "Cloud metadata endpoint reference detected",
                     "Code that touches cloud instance metadata endpoints needs careful review to avoid SSRF exposure and credential theft.",
+                    Some(line.trim().to_string()),
+                ));
+            }
+        }
+    }
+
+    // Rate limiting check: look for ThrottleRequests on auth-related routes
+    let has_throttle_on_auth = project.files_under("routes/").iter().any(|file| {
+        let content_lower = file.content.to_ascii_lowercase();
+        (content_lower.contains("login") || content_lower.contains("register") || content_lower.contains("password"))
+            && (content_lower.contains("throttle") || content_lower.contains("ratelimit"))
+    });
+    let has_rate_limiter_provider = project.files.iter().any(|file| {
+        file.content.contains("RateLimiter::for(") || file.content.contains("ThrottleRequests")
+    });
+    let has_auth_routes = project.files_under("routes/").iter().any(|file| {
+        let content_lower = file.content.to_ascii_lowercase();
+        content_lower.contains("login") || content_lower.contains("register") || content_lower.contains("password/reset")
+    });
+    if has_auth_routes && !has_throttle_on_auth && !has_rate_limiter_provider {
+        findings.push(make_finding(
+            RULES[8],
+            None,
+            None,
+            "Auth routes may lack rate limiting",
+            "Login, registration, and password reset routes should use ThrottleRequests middleware or a RateLimiter to prevent brute-force and credential stuffing attacks.",
+            None,
+        ));
+    }
+
+    // Security headers check
+    let has_security_headers = project.files.iter().any(|file| {
+        file.relative_path.ends_with(".php")
+            && (file.content.contains("X-Content-Type-Options")
+                || file.content.contains("X-Frame-Options")
+                || file.content.contains("Content-Security-Policy")
+                || file.content.contains("SecurityHeaders")
+                || file.content.contains("SecureHeaders"))
+    });
+    if !has_security_headers {
+        findings.push(make_finding(
+            RULES[9],
+            None,
+            None,
+            "No security headers middleware detected",
+            "Security headers like X-Content-Type-Options, X-Frame-Options, and Content-Security-Policy add defense-in-depth against XSS and clickjacking. Add them via middleware or web server config.",
+            None,
+        ));
+    }
+
+    // HSTS check
+    let has_hsts = project.files.iter().any(|file| {
+        file.relative_path.ends_with(".php")
+            && file.content.contains("Strict-Transport-Security")
+    });
+    if !has_hsts {
+        findings.push(make_finding(
+            RULES[10],
+            None,
+            None,
+            "HSTS header not configured in application",
+            "Enable Strict-Transport-Security to ensure browsers only access your application over HTTPS. This can be set via middleware or web server configuration.",
+            None,
+        ));
+    }
+
+    // SRI check: scan Blade templates for external scripts/styles without integrity attribute
+    let external_asset_re = Regex::new(
+        r#"<(script|link)\s[^>]*(?:src|href)\s*=\s*["']https?://[^"']+"#,
+    )
+    .expect("valid regex");
+    for file in project.files.iter().filter(|f| f.relative_path.ends_with(".blade.php")) {
+        for (idx, line) in file.content.lines().enumerate() {
+            if external_asset_re.is_match(line) && !line.contains("integrity=") {
+                findings.push(make_finding(
+                    RULES[11],
+                    Some(&file.relative_path),
+                    Some(idx + 1),
+                    "External script or style loaded without SRI",
+                    "Externally loaded scripts and stylesheets should include an integrity attribute (Subresource Integrity) to prevent tampering via compromised CDNs.",
                     Some(line.trim().to_string()),
                 ));
             }

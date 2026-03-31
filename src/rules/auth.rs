@@ -12,7 +12,7 @@ use crate::scanner::Project;
 
 use super::{find_line, make_finding, snippet_for_line};
 
-const RULES: [RuleMeta; 8] = [
+const RULES: [RuleMeta; 9] = [
     RuleMeta {
         id: "auth.missing-route-auth",
         title: "Sensitive routes may be missing auth middleware",
@@ -60,6 +60,12 @@ const RULES: [RuleMeta; 8] = [
         title: "User-controlled role or permission assignment",
         category: Category::Auth,
         default_severity: Severity::High,
+    },
+    RuleMeta {
+        id: "auth.missing-input-validation",
+        title: "Controller method without visible input validation",
+        category: Category::Auth,
+        default_severity: Severity::Medium,
     },
 ];
 
@@ -223,6 +229,33 @@ pub fn run(project: &Project, context: &ScanContext) -> Vec<crate::models::Findi
             "The codebase references password handling, but no bcrypt/argon2/Hash::make usage was found. Verify that stored passwords are hashed with Laravel's supported drivers.",
             None,
         ));
+    }
+
+    // Input validation check: controllers using Request without validation
+    let validation_re = Regex::new(
+        r"(\$request->validate\s*\(|Validator::make\s*\(|\$this->validate\s*\(|FormRequest|extends\s+FormRequest)",
+    )
+    .expect("valid regex");
+    let request_usage_re = Regex::new(
+        r"\$request->(input|get|all|post|query|only|except)\s*\(",
+    )
+    .expect("valid regex");
+    for file in project.files_under("app/Http/Controllers/") {
+        if !file.relative_path.ends_with(".php") {
+            continue;
+        }
+        let uses_request = request_usage_re.is_match(&file.content);
+        let has_validation = validation_re.is_match(&file.content);
+        if uses_request && !has_validation {
+            findings.push(make_finding(
+                RULES[8],
+                Some(&file.relative_path),
+                Some(1),
+                "Controller uses request input without visible validation",
+                "All user input should be validated. Use $request->validate(), Validator::make(), or a dedicated FormRequest class to enforce constraints.",
+                None,
+            ));
+        }
     }
 
     let has_remember_token = project

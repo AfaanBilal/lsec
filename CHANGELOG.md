@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-03-31
+
 ### Added
 
 - **injection.xss-unescaped-output** — detects `{!! !!}` unescaped output in
@@ -54,5 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - GitHub Actions workflow for cross-platform releases
 - GitHub Code Scanning integration via SARIF upload
 
-[Unreleased]: https://github.com/AfaanBilal/lsec/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/AfaanBilal/lsec/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/AfaanBilal/lsec/releases/tag/v0.1.4
 [0.1.3]: https://github.com/AfaanBilal/lsec/releases/tag/v0.1.3
